@@ -24,6 +24,8 @@ All notable changes to this project are documented here. The format follows
   `make up` finishes within 15 minutes when the images are present.
 - SDK foundations: the error hierarchy with CLI exit codes, every name and path in `modelport.naming`,
   client settings and structured logging.
+- `modelport validate DIR`: twelve ordered checks with a fix for each failure, no cluster needed; global
+  `--json`, `--debug` and `--version`.
 - `BaseModel` and `Predictions` (the contract a model implements), loading a model class from its
   folder, and input/output checks against the signature; the MLflow signature built from `model.yaml`.
 - `model.yaml` spec (`ModelSpec`) with field-path error messages and its exported JSON Schema.

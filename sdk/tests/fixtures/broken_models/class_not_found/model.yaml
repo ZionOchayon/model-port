@@ -1,0 +1,9 @@
+name: toy-model
+class: model:Missing
+framework: xgboost
+labels: [a, b]
+signature:
+  inputs:
+    - {name: x, type: double}
+data:
+  dataset: s3://datasets/toy

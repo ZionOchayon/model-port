@@ -10,6 +10,6 @@ def test_json_logs_have_fixed_keys(capsys):
     lines = capsys.readouterr().err.strip().splitlines()
     assert len(lines) == 1
     record = json.loads(lines[0])
-    assert {"timestamp", "level", "event", "model", "logger"} <= record.keys()
+    assert {"timestamp", "level", "event", "model", "module"} <= record.keys()
     assert record["event"] == "registry.alias_set"
     assert record["level"] == "info"

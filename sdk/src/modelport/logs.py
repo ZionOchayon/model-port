@@ -31,6 +31,6 @@ def configure_logging(*, json: bool, level: str = "INFO") -> None:
 
 
 def get_logger(name: str) -> structlog.typing.FilteringBoundLogger:
-    """A logger whose records carry `logger=<name>`."""
-    logger: structlog.typing.FilteringBoundLogger = structlog.get_logger().bind(logger=name)
+    """A lazy logger whose records carry `module=<name>`; it follows `configure_logging` called later."""
+    logger: structlog.typing.FilteringBoundLogger = structlog.get_logger(module=name)
     return logger
