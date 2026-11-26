@@ -1,0 +1,501 @@
+{
+  "$defs": {
+    "BatchResources": {
+      "additionalProperties": false,
+      "description": "Batch inference and evaluation jobs on the shared cluster.",
+      "properties": {
+        "batch_size": {
+          "default": 256,
+          "maximum": 8192,
+          "minimum": 1,
+          "title": "Batch Size",
+          "type": "integer"
+        },
+        "cpus_per_task": {
+          "default": 1.0,
+          "exclusiveMinimum": 0,
+          "maximum": 4,
+          "title": "Cpus Per Task",
+          "type": "number"
+        }
+      },
+      "title": "BatchResources",
+      "type": "object"
+    },
+    "ColumnSpec": {
+      "additionalProperties": false,
+      "description": "One input column.",
+      "properties": {
+        "name": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/ColumnType"
+        }
+      },
+      "required": [
+        "name",
+        "type"
+      ],
+      "title": "ColumnSpec",
+      "type": "object"
+    },
+    "ColumnType": {
+      "description": "Column types of the model signature (MLflow `ColSpec` types).",
+      "enum": [
+        "binary",
+        "string",
+        "double",
+        "float",
+        "long",
+        "integer",
+        "boolean"
+      ],
+      "title": "ColumnType",
+      "type": "string"
+    },
+    "DataSpec": {
+      "additionalProperties": false,
+      "description": "The dataset a model trains on: `s3://datasets/<name>` (latest version) or `.../v<n>` (pinned).",
+      "properties": {
+        "auto_retrain": {
+          "default": true,
+          "title": "Auto Retrain",
+          "type": "boolean"
+        },
+        "dataset": {
+          "pattern": "^s3://datasets/[a-z0-9][a-z0-9-]{0,38}[a-z0-9](/v[1-9][0-9]*)?/?$",
+          "title": "Dataset",
+          "type": "string"
+        },
+        "label_column": {
+          "default": "label",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "title": "Label Column",
+          "type": "string"
+        }
+      },
+      "required": [
+        "dataset"
+      ],
+      "title": "DataSpec",
+      "type": "object"
+    },
+    "DriftSpec": {
+      "additionalProperties": false,
+      "description": "PSI thresholds and live-drift sensitivity.",
+      "properties": {
+        "bins": {
+          "default": 10,
+          "maximum": 50,
+          "minimum": 3,
+          "title": "Bins",
+          "type": "integer"
+        },
+        "inference_log_sample_rate": {
+          "default": 1.0,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Inference Log Sample Rate",
+          "type": "number"
+        },
+        "live_class_share_increase": {
+          "default": 0.3,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Live Class Share Increase",
+          "type": "number"
+        },
+        "live_confidence_drop": {
+          "default": 0.15,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Live Confidence Drop",
+          "type": "number"
+        },
+        "min_samples": {
+          "default": 500,
+          "minimum": 50,
+          "title": "Min Samples",
+          "type": "integer"
+        },
+        "psi_critical": {
+          "default": 0.25,
+          "exclusiveMinimum": 0,
+          "title": "Psi Critical",
+          "type": "number"
+        },
+        "psi_warning": {
+          "default": 0.1,
+          "exclusiveMinimum": 0,
+          "title": "Psi Warning",
+          "type": "number"
+        }
+      },
+      "title": "DriftSpec",
+      "type": "object"
+    },
+    "EvaluationSpec": {
+      "additionalProperties": false,
+      "description": "The three-condition evaluation gate.",
+      "properties": {
+        "latency_batch_size": {
+          "default": 256,
+          "maximum": 4096,
+          "minimum": 1,
+          "title": "Latency Batch Size",
+          "type": "integer"
+        },
+        "latency_repeats": {
+          "default": 5,
+          "maximum": 50,
+          "minimum": 3,
+          "title": "Latency Repeats",
+          "type": "integer"
+        },
+        "max_drop_per_class": {
+          "default": 0.05,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Max Drop Per Class",
+          "type": "number"
+        },
+        "max_latency_increase": {
+          "default": 0.2,
+          "maximum": 10,
+          "minimum": 0,
+          "title": "Max Latency Increase",
+          "type": "number"
+        },
+        "metric": {
+          "$ref": "#/$defs/MetricName",
+          "default": "f1_macro"
+        },
+        "min_absolute": {
+          "default": 0.5,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Min Absolute",
+          "type": "number"
+        },
+        "min_improvement": {
+          "default": 0.0,
+          "maximum": 1,
+          "minimum": -1,
+          "title": "Min Improvement",
+          "type": "number"
+        }
+      },
+      "title": "EvaluationSpec",
+      "type": "object"
+    },
+    "Framework": {
+      "description": "Training framework, which picks the Ray Train strategy.",
+      "enum": [
+        "torch",
+        "xgboost"
+      ],
+      "title": "Framework",
+      "type": "string"
+    },
+    "MetricName": {
+      "description": "Primary metric of the evaluation gate.",
+      "enum": [
+        "f1_macro",
+        "accuracy"
+      ],
+      "title": "MetricName",
+      "type": "string"
+    },
+    "Resources": {
+      "additionalProperties": false,
+      "description": "Compute for training, serving and batch.",
+      "properties": {
+        "batch": {
+          "$ref": "#/$defs/BatchResources"
+        },
+        "serve": {
+          "$ref": "#/$defs/ServeResources"
+        },
+        "train": {
+          "$ref": "#/$defs/TrainResources"
+        }
+      },
+      "title": "Resources",
+      "type": "object"
+    },
+    "RuntimeSpec": {
+      "additionalProperties": false,
+      "description": "Per-model dependencies, each pinned with ==.",
+      "properties": {
+        "pip": {
+          "default": [],
+          "items": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*(\\[[A-Za-z0-9_,.-]+\\])?==[A-Za-z0-9_.+!-]+$",
+            "type": "string"
+          },
+          "title": "Pip",
+          "type": "array"
+        }
+      },
+      "title": "RuntimeSpec",
+      "type": "object"
+    },
+    "ServeResources": {
+      "additionalProperties": false,
+      "description": "Serve replicas of one model version.",
+      "properties": {
+        "cpus": {
+          "default": 0.5,
+          "exclusiveMinimum": 0,
+          "maximum": 2,
+          "title": "Cpus",
+          "type": "number"
+        },
+        "memory": {
+          "default": "1Gi",
+          "pattern": "^[1-9][0-9]*(Mi|Gi)$",
+          "title": "Memory",
+          "type": "string"
+        },
+        "replicas": {
+          "default": 1,
+          "maximum": 4,
+          "minimum": 1,
+          "title": "Replicas",
+          "type": "integer"
+        }
+      },
+      "title": "ServeResources",
+      "type": "object"
+    },
+    "ServingSpec": {
+      "additionalProperties": false,
+      "description": "Canary and serving thresholds.",
+      "properties": {
+        "auto_deploy": {
+          "default": true,
+          "title": "Auto Deploy",
+          "type": "boolean"
+        },
+        "canary_weight": {
+          "default": 0.1,
+          "exclusiveMinimum": 0,
+          "maximum": 0.5,
+          "title": "Canary Weight",
+          "type": "number"
+        },
+        "latency_p95_ms": {
+          "default": 500.0,
+          "exclusiveMinimum": 0,
+          "title": "Latency P95 Ms",
+          "type": "number"
+        },
+        "max_error_rate": {
+          "default": 0.02,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Max Error Rate",
+          "type": "number"
+        },
+        "min_canary_requests": {
+          "default": 50,
+          "minimum": 1,
+          "title": "Min Canary Requests",
+          "type": "integer"
+        },
+        "observation_window_minutes": {
+          "default": 10,
+          "maximum": 120,
+          "minimum": 1,
+          "title": "Observation Window Minutes",
+          "type": "integer"
+        }
+      },
+      "title": "ServingSpec",
+      "type": "object"
+    },
+    "SignatureSpec": {
+      "additionalProperties": false,
+      "description": "Input columns (outputs are fixed: prediction, confidence).",
+      "properties": {
+        "inputs": {
+          "items": {
+            "$ref": "#/$defs/ColumnSpec"
+          },
+          "minItems": 1,
+          "title": "Inputs",
+          "type": "array"
+        }
+      },
+      "required": [
+        "inputs"
+      ],
+      "title": "SignatureSpec",
+      "type": "object"
+    },
+    "TrainResources": {
+      "additionalProperties": false,
+      "description": "Ray Train workers (at least 2: DDP on two workers).",
+      "properties": {
+        "cpus_per_worker": {
+          "default": 1.0,
+          "exclusiveMinimum": 0,
+          "maximum": 4,
+          "title": "Cpus Per Worker",
+          "type": "number"
+        },
+        "memory_per_worker": {
+          "default": "2Gi",
+          "pattern": "^[1-9][0-9]*(Mi|Gi)$",
+          "title": "Memory Per Worker",
+          "type": "string"
+        },
+        "workers": {
+          "default": 2,
+          "maximum": 8,
+          "minimum": 2,
+          "title": "Workers",
+          "type": "integer"
+        }
+      },
+      "title": "TrainResources",
+      "type": "object"
+    },
+    "TrainSpec": {
+      "additionalProperties": false,
+      "description": "Training settings passed to `train_loop` through `TrainConfig`.",
+      "properties": {
+        "batch_size": {
+          "default": 64,
+          "maximum": 8192,
+          "minimum": 1,
+          "title": "Batch Size",
+          "type": "integer"
+        },
+        "epochs": {
+          "default": 3,
+          "maximum": 200,
+          "minimum": 1,
+          "title": "Epochs",
+          "type": "integer"
+        },
+        "learning_rate": {
+          "default": 0.001,
+          "exclusiveMinimum": 0,
+          "maximum": 10,
+          "title": "Learning Rate",
+          "type": "number"
+        },
+        "max_failures": {
+          "default": 2,
+          "maximum": 5,
+          "minimum": 0,
+          "title": "Max Failures",
+          "type": "integer"
+        },
+        "params": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "items": {},
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Params",
+          "type": "object"
+        }
+      },
+      "title": "TrainSpec",
+      "type": "object"
+    }
+  },
+  "$id": "https://modelport.dev/schemas/model.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Everything the platform needs to know about one model (`model.yaml`).",
+  "properties": {
+    "class": {
+      "pattern": "^[A-Za-z_][A-Za-z0-9_.]*:[A-Za-z_][A-Za-z0-9_]*$",
+      "title": "Class",
+      "type": "string"
+    },
+    "data": {
+      "$ref": "#/$defs/DataSpec"
+    },
+    "drift": {
+      "$ref": "#/$defs/DriftSpec"
+    },
+    "evaluation": {
+      "$ref": "#/$defs/EvaluationSpec"
+    },
+    "framework": {
+      "$ref": "#/$defs/Framework"
+    },
+    "labels": {
+      "items": {
+        "maxLength": 64,
+        "minLength": 1,
+        "type": "string"
+      },
+      "minItems": 2,
+      "title": "Labels",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "name": {
+      "pattern": "^[a-z][a-z0-9-]{1,38}[a-z0-9]$",
+      "title": "Name",
+      "type": "string"
+    },
+    "resources": {
+      "$ref": "#/$defs/Resources"
+    },
+    "runtime": {
+      "$ref": "#/$defs/RuntimeSpec"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "serving": {
+      "$ref": "#/$defs/ServingSpec"
+    },
+    "signature": {
+      "$ref": "#/$defs/SignatureSpec"
+    },
+    "train": {
+      "$ref": "#/$defs/TrainSpec"
+    }
+  },
+  "required": [
+    "name",
+    "class",
+    "framework",
+    "labels",
+    "signature",
+    "data"
+  ],
+  "title": "modelport model.yaml",
+  "type": "object"
+}

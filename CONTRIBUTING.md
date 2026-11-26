@@ -37,3 +37,11 @@ Inside the toolbox, prefix each command with `docker compose run --rm toolbox`.
 - **Names are contracts.** Module paths, CLI flags, metric names, aliases, tag keys, S3 paths and DAG IDs change everywhere at once, or not at all.
 - **Decisions** that shape the architecture get an ADR in `docs/adr/` (Context, Decision, Consequences) and a line in `docs/adr/README.md`.
 - **Data**: public datasets only, with credit in `NOTICE`.
+
+## The model.yaml schema
+
+`sdk/src/modelport/schema/model.schema.json` is generated from `modelport.spec.ModelSpec`. After changing the spec, regenerate it (a contract test fails until you do):
+
+```bash
+uv run python -c "import json,modelport.spec as s; print(json.dumps(s.export_json_schema(), indent=2, sort_keys=True))" > sdk/src/modelport/schema/model.schema.json
+```

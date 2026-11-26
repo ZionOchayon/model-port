@@ -1,0 +1,314 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://modelport.dev/schemas/model.schema.json",
+  "title": "modelport model.yaml",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "class", "framework", "labels", "signature", "data"],
+  "properties": {
+    "schema_version": { "const": 1, "default": 1 },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,38}[a-z0-9]$",
+      "description": "Registered model name; also the Serve route /<name>."
+    },
+    "class": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_.]*:[A-Za-z_][A-Za-z0-9_]*$",
+      "description": "<module>:<Class> relative to the model folder."
+    },
+    "framework": { "enum": ["torch", "xgboost"] },
+    "labels": {
+      "type": "array",
+      "minItems": 2,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "maxLength": 64 }
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["inputs"],
+      "properties": {
+        "inputs": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/column" }
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pip": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*(\\[[A-Za-z0-9_,.-]+\\])?==[A-Za-z0-9_.+!-]+$"
+          }
+        }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "train": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "workers": {
+              "type": "integer",
+              "minimum": 2,
+              "maximum": 8,
+              "default": 2
+            },
+            "cpus_per_worker": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 4,
+              "default": 1
+            },
+            "memory_per_worker": {
+              "$ref": "#/$defs/quantity",
+              "default": "2Gi"
+            }
+          }
+        },
+        "serve": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "replicas": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4,
+              "default": 1
+            },
+            "cpus": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 2,
+              "default": 0.5
+            },
+            "memory": { "$ref": "#/$defs/quantity", "default": "1Gi" }
+          }
+        },
+        "batch": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "cpus_per_task": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 4,
+              "default": 1
+            },
+            "batch_size": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8192,
+              "default": 256
+            }
+          }
+        }
+      }
+    },
+    "train": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "epochs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200,
+          "default": 3
+        },
+        "batch_size": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8192,
+          "default": 64
+        },
+        "learning_rate": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 10,
+          "default": 0.001
+        },
+        "max_failures": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5,
+          "default": 2
+        },
+        "params": {
+          "type": "object",
+          "default": {},
+          "additionalProperties": {
+            "type": ["string", "number", "boolean", "array", "null"]
+          }
+        }
+      }
+    },
+    "evaluation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "metric": { "enum": ["f1_macro", "accuracy"], "default": "f1_macro" },
+        "min_improvement": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1,
+          "default": 0.0
+        },
+        "max_drop_per_class": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.05
+        },
+        "max_latency_increase": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10,
+          "default": 0.2
+        },
+        "min_absolute": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.5
+        },
+        "latency_batch_size": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4096,
+          "default": 256
+        },
+        "latency_repeats": {
+          "type": "integer",
+          "minimum": 3,
+          "maximum": 50,
+          "default": 5
+        }
+      }
+    },
+    "serving": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "canary_weight": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 0.5,
+          "default": 0.1
+        },
+        "observation_window_minutes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 120,
+          "default": 10
+        },
+        "min_canary_requests": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 50
+        },
+        "latency_p95_ms": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 500
+        },
+        "max_error_rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.02
+        },
+        "auto_deploy": { "type": "boolean", "default": true }
+      }
+    },
+    "drift": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "psi_warning": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 0.1
+        },
+        "psi_critical": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 0.25
+        },
+        "min_samples": { "type": "integer", "minimum": 50, "default": 500 },
+        "bins": {
+          "type": "integer",
+          "minimum": 3,
+          "maximum": 50,
+          "default": 10
+        },
+        "live_confidence_drop": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "default": 0.15
+        },
+        "live_class_share_increase": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "default": 0.3
+        },
+        "inference_log_sample_rate": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "default": 1.0
+        }
+      }
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dataset"],
+      "properties": {
+        "dataset": {
+          "type": "string",
+          "pattern": "^s3://datasets/[a-z0-9][a-z0-9-]{0,38}[a-z0-9](/v[1-9][0-9]*)?/?$"
+        },
+        "label_column": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "default": "label"
+        },
+        "auto_retrain": { "type": "boolean", "default": true }
+      }
+    }
+  },
+  "$defs": {
+    "column": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type"],
+      "properties": {
+        "name": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+        "type": {
+          "enum": [
+            "binary",
+            "string",
+            "double",
+            "float",
+            "long",
+            "integer",
+            "boolean"
+          ]
+        }
+      }
+    },
+    "quantity": { "type": "string", "pattern": "^[1-9][0-9]*(Mi|Gi)$" }
+  }
+}

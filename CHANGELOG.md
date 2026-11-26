@@ -24,3 +24,4 @@ All notable changes to this project are documented here. The format follows
   `make up` finishes within 15 minutes when the images are present.
 - SDK foundations: the error hierarchy with CLI exit codes, every name and path in `modelport.naming`,
   client settings and structured logging.
+- `model.yaml` spec (`ModelSpec`) with field-path error messages and its exported JSON Schema.

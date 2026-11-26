@@ -25,6 +25,7 @@ dev = [
   "types-PyYAML",
   "types-requests",
   "hypothesis",
+  "jsonschema",
 ]
 
 [tool.ruff]
