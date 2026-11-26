@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Namespace
+metadata: { name: platform, labels: { app.kubernetes.io/part-of: modelport } }
+---
+apiVersion: v1
+kind: Namespace
+metadata: { name: ray, labels: { app.kubernetes.io/part-of: modelport } }
+---
+apiVersion: v1
+kind: Namespace
+metadata: { name: monitoring, labels: { app.kubernetes.io/part-of: modelport } }

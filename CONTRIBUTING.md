@@ -5,9 +5,12 @@
 You need Docker. Everything else runs in the dev toolbox (ADR-0019):
 
 ```bash
+docker network create kind   # once; kind reuses it, and the toolbox joins it
 docker compose build toolbox
 docker compose run --rm toolbox make help
 ```
+
+Inside the toolbox, kubectl reaches the cluster through `.modelport/kubeconfig`, which `scripts/kubeconfig.sh` writes with `kind get kubeconfig --internal`. Use `docker compose run --rm --service-ports toolbox make ui` to publish the UI ports to your browser.
 
 On a Linux host with uv, kind, kubectl and Helm installed, you can run the same `make` targets directly. `scripts/install-tools.sh` installs the pinned kind, kubectl and Helm with sha256 checks.
 

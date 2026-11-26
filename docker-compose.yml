@@ -1,4 +1,4 @@
-# Dev toolbox (ADR-0019): `docker compose run --rm toolbox make <target>`.
+# Dev toolbox (ADR-0019): `docker compose run --rm toolbox make <target>` (add --service-ports for `make ui`).
 # The platform itself runs on kind, which this toolbox drives through the host's Docker socket.
 # Build args repeat pins from versions.env (Compose cannot read it for builds);
 # scripts/check_versions.py fails CI if they differ.
@@ -18,6 +18,23 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - uv-cache:/root/.cache/uv
       - toolbox-venv:/opt/venv
+    # kind's network: the toolbox reaches the API server as modelport-control-plane:6443.
+    networks: [kind]
+    # UIs, port-forwarded by scripts/ui.sh on 0.0.0.0: Airflow, MLflow, Ray, Serve, Grafana,
+    # Prometheus, Alertmanager, MinIO.
+    ports:
+      - "8080:8080"
+      - "5000:5000"
+      - "8265:8265"
+      - "8000:8000"
+      - "3000:3000"
+      - "9090:9090"
+      - "9093:9093"
+      - "9000:9000"
+
+networks:
+  kind:
+    external: true
 
 volumes:
   uv-cache:
