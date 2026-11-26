@@ -6,6 +6,8 @@ from typing import Final
 
 import numpy as np
 import pandas as pd
+from mlflow.models import ModelSignature
+from mlflow.types import ColSpec, Schema
 
 from modelport.errors import SignatureMismatchError
 from modelport.spec import ColumnSpec, ColumnType, ModelSpec
@@ -58,6 +60,13 @@ def _first_bad_row(series: pd.Series, column: ColumnSpec) -> int | None:
         return None
     accepts = _RULES[column.type][0]
     return next((i for i, v in enumerate(series.to_numpy()) if not accepts(v)), None)
+
+
+def build_signature(spec: ModelSpec) -> ModelSignature:
+    """The MLflow signature: model.yaml inputs; fixed outputs prediction (string), confidence (double)."""
+    inputs = Schema([ColSpec(type=c.type.value, name=c.name) for c in spec.signature.inputs])
+    outputs = Schema([ColSpec(type=t.value, name=name) for name, t in OUTPUT_COLUMNS])
+    return ModelSignature(inputs=inputs, outputs=outputs)
 
 
 def check_input_frame(frame: pd.DataFrame, spec: ModelSpec) -> None:
