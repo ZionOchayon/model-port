@@ -25,4 +25,5 @@ All notable changes to this project are documented here. The format follows
 - SDK foundations: the error hierarchy with CLI exit codes, every name and path in `modelport.naming`,
   client settings and structured logging.
 - `model.yaml` spec (`ModelSpec`) with field-path error messages and its exported JSON Schema.
-- Local Ray Train integration test: TorchTrainer with DDP (gloo), a checkpoint per epoch and resume.
+- Local Ray Train integration test: TorchTrainer with DDP (gloo), a checkpoint per epoch and resume; XGBoostTrainer
+  with a checkpoint per boosting round and resume.

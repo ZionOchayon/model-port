@@ -57,17 +57,6 @@ def train_loop(config):
             ray.train.report(metrics)
 
 
-@pytest.fixture(scope="module")
-def local_ray(tmp_path_factory):
-    home = tmp_path_factory.mktemp("home")
-    with pytest.MonkeyPatch.context() as mp:
-        mp.setenv("HOME", str(home))  # Ray must not create a token file in the real home (research pitfall 2)
-        mp.setenv("RAY_TRAIN_V2_ENABLED", "1")
-        ray.init(num_cpus=3, include_dashboard=False, configure_logging=False)
-        yield
-        ray.shutdown()
-
-
 def fit(storage, epochs):
     import numpy as np
     import pandas as pd
