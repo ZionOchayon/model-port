@@ -20,3 +20,5 @@ All notable changes to this project are documented here. The format follows
   LocalExecutor and SimpleAuthManager.
 - MinIO built from source, and a Job that creates the eight S3 buckets idempotently.
 - MLflow 3.18 tracking and registry server (PostgreSQL backend, artifacts in MinIO).
+- `make up` / `make down` (full and smoke profiles) with a readiness wait, and a weekly CI check that
+  `make up` finishes within 15 minutes when the images are present.

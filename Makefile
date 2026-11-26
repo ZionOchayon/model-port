@@ -15,13 +15,13 @@ help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' Makefile | sed 's/:.*## /\t/'
 
 up: ## Create the kind cluster and install everything (PROFILE=full|smoke)
-	@echo "make up: not implemented yet"; exit 1
+	@PROFILE=$(PROFILE) UP_TIMEOUT=$(UP_TIMEOUT) bash scripts/up.sh
 
 down: ## Delete the cluster and local state
-	@echo "make down: not implemented yet"; exit 1
+	@bash scripts/down.sh
 
 images: ## Build and load the three modelport images
-	@echo "make images: not implemented yet"; exit 1
+	@bash scripts/images.sh
 
 ui: ## Port-forward the UIs and print their URLs
 	@echo "make ui: not implemented yet"; exit 1

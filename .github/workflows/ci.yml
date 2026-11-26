@@ -215,7 +215,7 @@ jobs:
 
   nfr3:
     # NFR-3: `make up` within 15 minutes on a machine that already has the images.
-    if: false # enabled once `make up` exists; then: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     needs: [static]
     runs-on: ubuntu-24.04
     timeout-minutes: 90
@@ -238,6 +238,16 @@ jobs:
           echo "make up took ${elapsed}s"
           echo "NFR-3 make up seconds: ${elapsed}" >> "$GITHUB_STEP_SUMMARY"
           test "$elapsed" -le 900
+      - name: Second up on the running stack is a no-op
+        run: make up PROFILE=smoke
+      - name: Memory in use
+        run: |
+          docker stats --no-stream --format '{{.Name}} {{.MemUsage}}' modelport-control-plane | tee -a "$GITHUB_STEP_SUMMARY"
+          # Per-container working set (kind has no metrics-server, so `kubectl top` is unavailable).
+          docker exec modelport-control-plane crictl stats -o json \
+            | jq -r '.stats[] | select(.memory.workingSetBytes.value != null)
+                     | "\(.attributes.labels["io.kubernetes.pod.namespace"])/\(.attributes.labels["io.kubernetes.container.name"]) \((.memory.workingSetBytes.value|tonumber)/1048576|floor) MiB"' \
+            | sort
       - name: Down
         if: always()
         run: make down

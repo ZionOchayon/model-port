@@ -1,0 +1,12 @@
+config:
+  core:
+    parallelism: 4
+    max_active_tasks_per_dag: 4
+scheduler:
+  resources:
+    requests: { cpu: 200m, memory: 1Gi }
+    limits: { cpu: "2", memory: 2560Mi }
+apiServer:
+  resources:
+    requests: { cpu: 50m, memory: 768Mi }
+    limits: { cpu: "1", memory: 1536Mi }
