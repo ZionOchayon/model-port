@@ -1,0 +1,16 @@
+# kuberay-operator chart 1.7.3. Keys verified in the chart's values.yaml.
+image:
+  repository: quay.io/kuberay/operator
+  tag: v1.7.3
+  pullPolicy: IfNotPresent
+resources:
+  requests: { cpu: 50m, memory: 128Mi }
+  limits: { cpu: 500m, memory: 512Mi }
+metrics:
+  enabled: true
+  serviceMonitor:
+    # Needs the monitoring.coreos.com CRDs, so it is enabled once kube-prometheus-stack is installed first.
+    enabled: false
+    interval: 30s
+    honorLabels: true
+    additionalLabels: {}

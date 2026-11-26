@@ -30,6 +30,8 @@ RUN set -eu; . /tmp/tools/versions.env; cd /tmp \
     && rm -rf /tmp/*
 
 COPY --from=dockercli /usr/local/bin/docker /usr/local/bin/docker
+# buildx makes `docker build` use BuildKit (the images use RUN --mount).
+COPY --from=dockercli /usr/local/libexec/docker/cli-plugins/docker-buildx /usr/local/libexec/docker/cli-plugins/docker-buildx
 COPY --from=prometheus /bin/promtool /usr/local/bin/promtool
 COPY --from=alertmanager /bin/amtool /usr/local/bin/amtool
 

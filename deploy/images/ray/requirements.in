@@ -1,0 +1,20 @@
+ray[default,train,serve,data]==2.60.1
+torch==2.15.0+cpu
+torchvision==0.29.2
+xgboost==3.4.1
+mlflow-skinny==3.18.0
+pillow
+boto3
+pyarrow
+pandas
+numpy
+pydantic==2.14.2
+pyyaml
+typer==0.29.1
+structlog==26.1.0
+requests
+prometheus-client==0.26.0
+# Bounds keep the lock compatible with packages the Ray base image already ships
+# (pyopenssl needs cryptography<46, mdit-py-plugins needs markdown-it-py<3).
+cryptography<46
+markdown-it-py<3

@@ -21,7 +21,7 @@ AIRFLOW_LOCK = "deploy/images/airflow/requirements.lock"
 
 # (pin key, files glob, regex with one group capturing the pinned version). Every capture must equal the pin.
 FILE_PINS: tuple[tuple[str, str, str], ...] = (
-    ("RAY_VERSION", RAY_LOCK, r"^ray\[[a-z,]+\]==(\S+)"),
+    ("RAY_VERSION", RAY_LOCK, r"^ray(?:\[[a-z,]+\])?==(\S+)"),
     ("TORCH_VERSION", RAY_LOCK, r"^torch==([\d.]+)"),
     ("TORCHVISION_VERSION", RAY_LOCK, r"^torchvision==([\d.]+)"),
     ("XGBOOST_VERSION", RAY_LOCK, r"^xgboost==(\S+)"),

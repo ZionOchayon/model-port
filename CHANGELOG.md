@@ -12,3 +12,6 @@ All notable changes to this project are documented here. The format follows
   pinned `versions.env`, `Makefile`, license and dataset credits.
 - Development toolbox: `docker compose run --rm toolbox make <target>` runs every target with the
   pinned tools and only Docker on the host (ADR-0019).
+- Static CI (lint, types, tests, Helm lint, version consistency) and `scripts/check_versions.py`.
+- kind cluster `modelport` with namespaces `platform`, `ray`, `monitoring`.
+- Ray image (`deploy/images/ray`, hash-locked), KubeRay operator 1.7.3 and a smoke RayJob.
