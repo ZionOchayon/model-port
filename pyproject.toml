@@ -31,6 +31,7 @@ dev = [
   "ruff==0.17.5",
   "types-PyYAML",
   "types-requests",
+  "pandas-stubs",
   "hypothesis",
   "jsonschema",
   # Frameworks of the example models, for the local Ray Train integration tests (CPU builds).

@@ -8,6 +8,7 @@ integer, no `true` for a number), and the cross-field rules JSON Schema cannot e
 import hashlib
 import json
 import re
+from collections.abc import Mapping
 from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, Any, Final, Literal, Self
@@ -265,16 +266,23 @@ def load_spec(path: Path) -> ModelSpec:
         raise SpecError(
             what=f"{path.name} must be a mapping of fields", fix="Start with `name:` and `class:`."
         )
+    return parse_spec(raw, source=path.name)
+
+
+def parse_spec(raw: Mapping[str, Any], *, source: str = "model.yaml") -> ModelSpec:
+    """Validate an already-parsed model.yaml document with the same strict rules as `load_spec`.
+
+    Raises:
+        SpecError: the document breaks the schema (all problems listed).
+    """
     try:
         return ModelSpec.model_validate_json(json.dumps(raw))
     except TypeError as err:  # YAML values JSON cannot hold, e.g. an unquoted date
-        raise SpecError(
-            what=f"{path.name} has a value that is not plain data: {err}", fix="Quote it."
-        ) from err
+        raise SpecError(what=f"{source} has a value that is not plain data: {err}", fix="Quote it.") from err
     except ValidationError as err:
         problems = [_describe(e) for e in err.errors(include_url=False)]
         raise SpecError(
-            what=f"{path.name} is invalid:\n  " + "\n  ".join(problems),
+            what=f"{source} is invalid:\n  " + "\n  ".join(problems),
             fix="Fix the fields listed above.",
             details={"errors": problems},
         ) from None
