@@ -15,3 +15,4 @@ All notable changes to this project are documented here. The format follows
 - Static CI (lint, types, tests, Helm lint, version consistency) and `scripts/check_versions.py`.
 - kind cluster `modelport` with namespaces `platform`, `ray`, `monitoring`.
 - Ray image (`deploy/images/ray`, hash-locked), KubeRay operator 1.7.3 and a smoke RayJob.
+- `scripts/secrets.sh` (all Secrets, generated once) and PostgreSQL 18 with the `airflow` and `mlflow` databases.
