@@ -1,0 +1,129 @@
+# Apache Airflow chart 1.22.0 with Airflow 3.4.0.
+airflowVersion: "3.4.0"
+defaultAirflowRepository: modelport/airflow
+defaultAirflowTag: "set-by-make-up"
+images:
+  airflow:
+    repository: modelport/airflow
+    tag: "set-by-make-up" # make up passes --set images.airflow.tag=$IMAGE_TAG
+    pullPolicy: IfNotPresent
+
+executor: LocalExecutor
+enableServiceLinks: false
+
+postgresql: { enabled: false }
+pgbouncer: { enabled: false }
+redis: { enabled: false }
+
+data:
+  metadataSecretName: airflow-metadata
+fernetKeySecretName: airflow-fernet-key
+apiSecretKeySecretName: airflow-api-secret-key
+jwtSecretName: airflow-jwt-secret
+
+createUserJob:
+  enabled: false # SimpleAuthManager; users come from config + passwords file
+migrateDatabaseJob:
+  enabled: true
+  useHelmHooks: false # works with helm --wait
+  applyCustomEnv: true
+
+extraEnvFrom: |
+  - configMapRef:
+      name: modelport-platform-env
+  - secretRef:
+      name: modelport-s3
+  - secretRef:
+      name: airflow-connections
+
+config:
+  core:
+    parallelism: 8
+    max_active_tasks_per_dag: 8
+    load_examples: "False"
+    auth_manager: airflow.api_fastapi.auth.managers.simple.simple_auth_manager.SimpleAuthManager
+    simple_auth_manager_users: "modelport:admin"
+    simple_auth_manager_passwords_file: /opt/airflow/auth/passwords.json
+  dag_processor:
+    refresh_interval: 60
+  metrics:
+    statsd_on: "True"
+  api:
+    expose_config: "False"
+  logging:
+    remote_logging: "False"
+
+workers:
+  celery: { persistence: { enabled: false } } # LocalExecutor: keeps the scheduler a Deployment (1.22 name)
+
+scheduler:
+  replicas: 1
+  resources:
+    requests: { cpu: 200m, memory: 1Gi }
+    limits: { cpu: "2", memory: 3Gi }
+  logGroomerSidecar:
+    resources:
+      requests: { cpu: 10m, memory: 32Mi }
+      limits: { cpu: 100m, memory: 128Mi }
+
+apiServer:
+  replicas: 1
+  resources:
+    requests: { cpu: 100m, memory: 768Mi }
+    limits: { cpu: "1", memory: 1536Mi }
+  # SimpleAuthManager opens the passwords file for append, so it cannot be a read-only Secret mount.
+  # An init container copies the Secret (the source of truth) into a writable emptyDir.
+  extraVolumes:
+    - name: airflow-auth-secret
+      secret: { secretName: airflow-auth }
+    - name: airflow-auth
+      emptyDir: {}
+  extraInitContainers:
+    - name: copy-passwords-file
+      image: '{{ template "airflow_image" . }}'
+      imagePullPolicy: IfNotPresent
+      command:
+        [
+          "bash",
+          "-c",
+          "cp /run/airflow-auth-secret/passwords.json /opt/airflow/auth/passwords.json",
+        ]
+      resources:
+        requests: { cpu: 10m, memory: 32Mi }
+        limits: { cpu: 100m, memory: 64Mi }
+      volumeMounts:
+        - {
+            name: airflow-auth-secret,
+            mountPath: /run/airflow-auth-secret,
+            readOnly: true,
+          }
+        - { name: airflow-auth, mountPath: /opt/airflow/auth }
+  extraVolumeMounts:
+    - name: airflow-auth
+      mountPath: /opt/airflow/auth
+
+dagProcessor:
+  enabled: true
+  resources:
+    requests: { cpu: 50m, memory: 384Mi }
+    limits: { cpu: 500m, memory: 1Gi }
+
+triggerer:
+  enabled: true
+  persistence: { enabled: false }
+  resources:
+    requests: { cpu: 50m, memory: 384Mi }
+    limits: { cpu: 500m, memory: 1Gi }
+
+statsd:
+  enabled: true
+  resources:
+    requests: { cpu: 10m, memory: 32Mi }
+    limits: { cpu: 100m, memory: 128Mi }
+
+dags:
+  persistence: { enabled: false }
+  gitSync: { enabled: false } # DAGs are baked into the image (ADR-0005)
+
+logs:
+  persistence: { enabled: false }

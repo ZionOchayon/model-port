@@ -16,3 +16,5 @@ All notable changes to this project are documented here. The format follows
 - kind cluster `modelport` with namespaces `platform`, `ray`, `monitoring`.
 - Ray image (`deploy/images/ray`, hash-locked), KubeRay operator 1.7.3 and a smoke RayJob.
 - `scripts/secrets.sh` (all Secrets, generated once) and PostgreSQL 18 with the `airflow` and `mlflow` databases.
+- Airflow image (hash-locked from the 3.4.0 constraints) and chart values: Airflow 3.4.0 on chart 1.22.0 with
+  LocalExecutor and SimpleAuthManager.

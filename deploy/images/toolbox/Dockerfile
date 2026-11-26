@@ -14,7 +14,7 @@ FROM ${TOOLBOX_BASE_IMAGE}
 # Python 3.12 is Ubuntu 24.04's python3; uv uses it instead of downloading one.
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-         bash ca-certificates curl git jq make openssl python3.12 python3.12-venv \
+         bash ca-certificates curl git jq make openssl python3 python3.12 python3.12-venv \
     && rm -rf /var/lib/apt/lists/*
 
 # kind, kubectl, helm (the same sha256-checked script CI uses), then uv and gh, all from versions.env.

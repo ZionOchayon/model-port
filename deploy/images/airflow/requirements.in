@@ -1,0 +1,12 @@
+apache-airflow==3.4.0
+apache-airflow-providers-cncf-kubernetes==10.25.0
+apache-airflow-providers-amazon==9.39.0
+apache-airflow-providers-standard==1.21.0
+apache-airflow-providers-postgres==7.1.1
+ray[default]==2.60.1
+mlflow-skinny==3.18.0
+prometheus-client==0.26.0
+pillow
+pydantic==2.14.2
+typer==0.29.1
+structlog==26.1.0
