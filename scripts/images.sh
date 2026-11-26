@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Build the modelport images and load them into kind. Usage: scripts/images.sh [ray|airflow|all]
-# Writes .modelport/images.env (IMAGE_TAG, RAY_IMAGE, AIRFLOW_IMAGE) for the other scripts. A partial
+# Build the modelport images and load them into kind. Usage: scripts/images.sh [ray|airflow|minio|all]
+# Writes .modelport/images.env (IMAGE_TAG, RAY_IMAGE, AIRFLOW_IMAGE, MINIO_IMAGE) for the other scripts. A partial
 # build updates only the images it built; IMAGE_TAG is always the Airflow image's tag (the chart uses it).
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -25,8 +25,8 @@ build() { # dockerfile image build-args...
 
 rm -rf dist && uv build --all-packages --wheel -o dist/ -q
 case $what in
-  ray | airflow | all) ;;
-  *) echo "usage: scripts/images.sh [ray|airflow|all]" >&2; exit 2 ;;
+  ray | airflow | minio | all) ;;
+  *) echo "usage: scripts/images.sh [ray|airflow|minio|all]" >&2; exit 2 ;;
 esac
 if [[ $what == ray || $what == all ]]; then
   RAY_IMAGE=modelport/ray:$tag
@@ -39,10 +39,20 @@ if [[ $what == airflow || $what == all ]]; then
   build deploy/images/airflow/Dockerfile "$AIRFLOW_IMAGE" \
     --build-arg AIRFLOW_BASE_IMAGE="$AIRFLOW_BASE_IMAGE" --build-arg AIRFLOW_VERSION="$AIRFLOW_VERSION"
 fi
+# MinIO is built from source at a fixed release (ADR-0003), so it is tagged by release and built only once.
+MINIO_IMAGE=modelport/minio:$MINIO_RELEASE
+if [[ $what == minio || $what == all ]]; then
+  if ! docker image inspect "$MINIO_IMAGE" > /dev/null 2>&1; then
+    docker build -f deploy/images/minio/Dockerfile -t "$MINIO_IMAGE" --build-arg MINIO_RELEASE="$MINIO_RELEASE" \
+      --build-arg GO_BUILDER_IMAGE="$GO_BUILDER_IMAGE" --build-arg ALPINE_IMAGE="$ALPINE_IMAGE" .
+  fi
+  kind load docker-image "$MINIO_IMAGE" --name modelport
+fi
 
 cat > .modelport/images.env <<ENV
 IMAGE_TAG=${AIRFLOW_IMAGE##*:}
 RAY_IMAGE=$RAY_IMAGE
 AIRFLOW_IMAGE=$AIRFLOW_IMAGE
+MINIO_IMAGE=$MINIO_IMAGE
 ENV
 echo "images: $what built and loaded (tag $tag)"

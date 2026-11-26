@@ -1,0 +1,20 @@
+apiVersion: batch/v1
+kind: Job
+metadata: { name: minio-buckets, namespace: platform }
+spec:
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: buckets
+          image: __RAY_IMAGE__
+          imagePullPolicy: IfNotPresent
+          command:
+            ["python", "-m", "modelport_platform.tools.bootstrap_buckets"]
+          envFrom:
+            - configMapRef: { name: modelport-platform-env }
+            - secretRef: { name: modelport-s3 }
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }

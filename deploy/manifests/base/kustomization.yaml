@@ -3,3 +3,5 @@ kind: Kustomization
 resources:
   - namespaces.yaml
   - postgres.yaml
+  - minio.yaml
+  - buckets-job.yaml
