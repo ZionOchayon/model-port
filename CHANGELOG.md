@@ -26,6 +26,8 @@ All notable changes to this project are documented here. The format follows
   client settings and structured logging.
 - `modelport validate DIR`: twelve ordered checks with a fix for each failure, no cluster needed; global
   `--json`, `--debug` and `--version`.
+- Model version lifecycle: states, legal transitions and the ordered alias changes for gate, canary,
+  promotion and rollback.
 - Deterministic code packaging (`code.zip` with a content hash that is the same on every OS).
 - `BaseModel` and `Predictions` (the contract a model implements), loading a model class from its
   folder, and input/output checks against the signature; the MLflow signature built from `model.yaml`.
