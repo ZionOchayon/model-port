@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: mlflow, namespace: platform, labels: { app: mlflow } }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: mlflow } }
+  template:
+    metadata: { labels: { app: mlflow } }
+    spec:
+      containers:
+        - name: mlflow
+          image: __MLFLOW_IMAGE__
+          imagePullPolicy: IfNotPresent
+          command: ["mlflow", "server"]
+          args:
+            - --host=0.0.0.0
+            - --port=5000
+            - --workers=2
+            - --backend-store-uri=postgresql+psycopg2://mlflow:$(MLFLOW_DB_PASSWORD)@postgres.platform.svc.cluster.local:5432/mlflow
+            - --artifacts-destination=s3://mlflow
+            - --allowed-hosts=mlflow,mlflow:*,mlflow.platform,mlflow.platform:*,mlflow.platform.svc,mlflow.platform.svc:*,mlflow.platform.svc.cluster.local,mlflow.platform.svc.cluster.local:*,localhost,localhost:*,127.0.0.1,127.0.0.1:*
+            - --expose-prometheus=/tmp/mlflow-metrics
+          env:
+            - {
+                name: MLFLOW_DB_PASSWORD,
+                valueFrom:
+                  {
+                    secretKeyRef:
+                      { name: postgres-credentials, key: mlflow-password },
+                  },
+              }
+            - {
+                name: MLFLOW_S3_ENDPOINT_URL,
+                value: "http://minio.platform.svc.cluster.local:9000",
+              }
+            - {
+                name: AWS_ACCESS_KEY_ID,
+                valueFrom:
+                  {
+                    secretKeyRef:
+                      { name: modelport-s3, key: AWS_ACCESS_KEY_ID },
+                  },
+              }
+            - {
+                name: AWS_SECRET_ACCESS_KEY,
+                valueFrom:
+                  {
+                    secretKeyRef:
+                      { name: modelport-s3, key: AWS_SECRET_ACCESS_KEY },
+                  },
+              }
+            - { name: AWS_DEFAULT_REGION, value: us-east-1 }
+            # Server-side jobs (job runner + 8 huey consumers, ~1 GiB) serve GenAI features modelport does not use.
+            - { name: MLFLOW_SERVER_ENABLE_JOB_EXECUTION, value: "false" }
+          ports: [{ containerPort: 5000, name: http }]
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 30
+            failureThreshold: 5
+          resources:
+            requests: { cpu: 100m, memory: 512Mi }
+            limits: { cpu: "1", memory: 1536Mi }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: mlflow, namespace: platform, labels: { app: mlflow } }
+spec:
+  selector: { app: mlflow }
+  ports: [{ port: 5000, targetPort: http, name: http }]

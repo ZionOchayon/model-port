@@ -19,3 +19,4 @@ All notable changes to this project are documented here. The format follows
 - Airflow image (hash-locked from the 3.4.0 constraints) and chart values: Airflow 3.4.0 on chart 1.22.0 with
   LocalExecutor and SimpleAuthManager.
 - MinIO built from source, and a Job that creates the eight S3 buckets idempotently.
+- MLflow 3.18 tracking and registry server (PostgreSQL backend, artifacts in MinIO).

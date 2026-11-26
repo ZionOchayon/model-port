@@ -5,3 +5,4 @@ resources:
   - postgres.yaml
   - minio.yaml
   - buckets-job.yaml
+  - mlflow.yaml
