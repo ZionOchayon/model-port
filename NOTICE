@@ -1,0 +1,24 @@
+modelport
+Copyright 2026 The modelport authors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+modelport is a development environment for learning and demonstration. It is not
+a production-ready platform.
+
+Datasets
+--------
+
+modelport does not ship any dataset. examples/datasets/prepare.py downloads the
+following public datasets on demand. Credit goes to their authors:
+
+- Fashion-MNIST: Han Xiao, Kashif Rasul and Roland Vollgraf (2017),
+  "Fashion-MNIST: a Novel Image Dataset for Benchmarking Machine Learning Algorithms".
+  MIT License. https://github.com/zalandoresearch/fashion-mnist
+
+- EuroSAT: Patrick Helber, Benjamin Bischke, Andreas Dengel and Damian Borth (2019),
+  "EuroSAT: A Novel Dataset and Deep Learning Benchmark for Land Use and Land Cover
+  Classification". MIT License. https://github.com/phelber/EuroSAT
+
+- Covertype: Jock A. Blackard (1998), UCI Machine Learning Repository.
+  CC BY 4.0. https://archive.ics.uci.edu/dataset/31/covertype

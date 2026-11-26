@@ -1,0 +1,13 @@
+# Keep build contexts small and private notes out of every image.
+drafts/
+.git/
+.venv/
+.data/
+.modelport/
+artifacts/
+**/__pycache__/
+**/*.pyc
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.hypothesis/

@@ -1,0 +1,27 @@
+[project]
+name = "modelport"
+version = "0.1.0"
+description = "SDK and CLI for onboarding models to the modelport platform"
+license = "Apache-2.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "pydantic==2.14.2",
+  "pyyaml>=6.0",
+  "typer==0.29.1",
+  "structlog==26.1.0",
+  "requests>=2.32",
+  "numpy>=2.2",
+  "pandas>=2.2",
+  "pyarrow>=19",
+  "mlflow-skinny==3.18.0",
+]
+
+[project.scripts]
+modelport = "modelport.cli.main:app"
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/modelport"]

@@ -1,0 +1,21 @@
+# Private working notes (spec, design, research, build log). Never committed.
+/drafts/
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+dist/
+
+# Local state written by make up / prepare.py / CI
+.modelport/
+.data/
+artifacts/
+
+# Generated
+deploy/monitoring/.rules.generated.yaml

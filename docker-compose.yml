@@ -1,0 +1,24 @@
+# Dev toolbox (ADR-0019): `docker compose run --rm toolbox make <target>`.
+# The platform itself runs on kind, which this toolbox drives through the host's Docker socket.
+# Build args repeat pins from versions.env (Compose cannot read it for builds);
+# scripts/check_versions.py fails CI if they differ.
+services:
+  toolbox:
+    build:
+      context: .
+      dockerfile: deploy/images/toolbox/Dockerfile
+      args:
+        TOOLBOX_BASE_IMAGE: ubuntu:24.04@sha256:562111b88caa79c71391c0c4d3c2114a7d5c35915c20561fd893cb1e07929e6b
+        DOCKER_CLI_IMAGE: docker:29.10.1-cli@sha256:4e60c31615e83523afbb59773b25d055c0da9edcd5f80a4c6a6eebad49de1a25
+        PROMETHEUS_IMAGE: quay.io/prometheus/prometheus:v3.16.0@sha256:9332054523223e2ddc18d8101799d54a4a8d823b030c53216f063a6c117773cd
+        ALERTMANAGER_IMAGE: quay.io/prometheus/alertmanager:v0.35.1@sha256:03d4e362b9948eee910802ddac55f9175b320862a2de1fdef5206c3213875a09
+    image: modelport/toolbox:local
+    volumes:
+      - .:/workspace
+      - /var/run/docker.sock:/var/run/docker.sock
+      - uv-cache:/root/.cache/uv
+      - toolbox-venv:/opt/venv
+
+volumes:
+  uv-cache:
+  toolbox-venv:

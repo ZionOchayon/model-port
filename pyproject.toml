@@ -1,0 +1,69 @@
+[project]
+name = "modelport-workspace"
+version = "0.0.0"
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["sdk", "platform"]
+
+[tool.uv.sources]
+modelport = { workspace = true }
+modelport-platform = { workspace = true }
+
+[dependency-groups]
+dev = [
+  "modelport",
+  "modelport-platform[airflow,ray]",
+  "mlflow==3.18.0",          # full MLflow for sqlite-backed registry tests
+  "pytest==9.2.0",
+  "mypy==2.4.1",
+  "ruff==0.17.5",
+  "types-PyYAML",
+  "types-requests",
+  "hypothesis",
+]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+src = ["sdk/src", "platform/src", "platform/dags"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "D", "ANN", "S", "PT", "RUF", "TID"]
+ignore = ["D105", "D107", "S101"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["D", "ANN", "S"]
+"examples/**" = ["D", "ANN"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+# Core modules must stay pure (hexagonal core). The per-module ban is enforced by
+# platform/tests/unit/test_core_purity.py, which imports each core module with these
+# packages blocked; ruff bans here are repo-wide only for truly forbidden imports.
+"mlflow.tracking.fluent".msg = "Use modelport.registry.MlflowRegistry instead of fluent MLflow APIs."
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+mypy_path = ["sdk/src", "platform/src"]
+packages = ["modelport", "modelport_platform"]
+
+[[tool.mypy.overrides]]
+module = ["ray.*", "mlflow.*", "kubernetes.*", "xgboost.*", "torchvision.*", "pyarrow.*", "boto3.*", "botocore.*", "airflow.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["sdk/tests", "platform/tests"]
+markers = [
+  "integration: needs local Ray or sqlite MLflow, no cluster",
+  "kind: needs the kind stack (make up)",
+]
+addopts = "-ra --strict-markers -m 'not kind'"
