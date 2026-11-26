@@ -22,3 +22,5 @@ All notable changes to this project are documented here. The format follows
 - MLflow 3.18 tracking and registry server (PostgreSQL backend, artifacts in MinIO).
 - `make up` / `make down` (full and smoke profiles) with a readiness wait, and a weekly CI check that
   `make up` finishes within 15 minutes when the images are present.
+- SDK foundations: the error hierarchy with CLI exit codes, every name and path in `modelport.naming`,
+  client settings and structured logging.
