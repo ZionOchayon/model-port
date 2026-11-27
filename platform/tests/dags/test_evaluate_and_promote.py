@@ -135,6 +135,7 @@ def test_decide_pass_sets_candidate_and_tags():
     assert info.tags[Tag.GATE_RESULT] == "passed"
     assert json.loads(info.tags[Tag.GATE_REASONS]) == []
     assert info.tags[Tag.GATE_EVAL_RUN_ID] == "eval-c"
+    assert reg.read_json("eval-c", "gate/champion_report.json")["version"] == "1"
     assert reg.snapshot(MODEL).candidate == "2"
     assert info.state is ModelState.CANDIDATE
 

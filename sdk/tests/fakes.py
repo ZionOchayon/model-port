@@ -99,6 +99,10 @@ class InMemoryRegistry:
             m for m, tags in self.models.items() if all(tags.get(k) == v for k, v in wanted.items())
         )
 
+    def latest_version(self, name: str) -> VersionInfo | None:
+        numbers = sorted(self.versions.get(name, {}), key=int)
+        return self.get_version(name, numbers[-1]) if numbers else None
+
     def model_uri(self, name: str, version: str) -> str:
         return f"models:/{name}/{version}"
 
@@ -114,13 +118,18 @@ class InMemoryRegistry:
 
     # ArtifactStore
     def find_submission(self, model: str, key: str) -> str | None:
-        found = [r for r, run in self.runs.items() if run["tags"] == {"model": model, "key": key}]
+        found = [
+            r
+            for r, run in self.runs.items()
+            if run["tags"].get(Tag.MODEL) == model and run["tags"].get(Tag.SUBMISSION_KEY) == key
+        ]
         return found[-1] if found else None
 
     def create_submission(self, model: str, package: Any, spec_path: Path, spec_sha256: str) -> str:
         run_id = f"run-{len(self.runs) + 1}"
         key = submission_key(package.sha256, spec_path.name, spec_sha256)
-        self.runs[run_id] = {"tags": {"model": model, "key": key}, "artifacts": {}}
+        tags = {Tag.MODEL: model, Tag.SUBMISSION_KEY: key, Tag.CODE_SHA256: package.sha256}
+        self.runs[run_id] = {"tags": tags, "artifacts": {}}
         return run_id
 
     def download(self, run_id: str, artifact_path: str, dst: Path) -> Path:
@@ -139,6 +148,9 @@ class InMemoryRegistry:
 
     def artifact_s3_uri(self, run_id: str, artifact_path: str) -> str:
         return f"s3://mlflow/0/{run_id}/artifacts/{artifact_path}"
+
+    def run_tags(self, run_id: str) -> dict[str, str]:
+        return dict(self.runs[run_id]["tags"])
 
     def run_url(self, run_id: str) -> str:
         return f"http://localhost:5000/#/runs/{run_id}"

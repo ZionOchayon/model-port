@@ -10,7 +10,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Final
+from typing import Annotated, Any, Final
 
 import click
 import typer
@@ -28,7 +28,7 @@ from modelport.errors import (
     SpecError,
 )
 from modelport.logs import configure_logging
-from modelport.naming import Tag, evaluate_run_id, rayjob_name, submission_key, submit_run_id
+from modelport.naming import Tag, deploy_run_id, evaluate_run_id, rayjob_name, submission_key, submit_run_id
 from modelport.packaging import build_code_zip
 from modelport.registry import ArtifactStore, MlflowRegistry, ModelRegistry
 from modelport.spec import spec_sha256
@@ -73,6 +73,7 @@ class Services:
     registry: ModelRegistry
     store: ArtifactStore
     orchestrator: Orchestrator
+    settings: ClientSettings
 
 
 def build_services() -> Services:
@@ -85,11 +86,12 @@ def build_services() -> Services:
         settings.airflow_password,
         timeout_s=settings.http_timeout_s,
     )
-    return Services(registry=registry, store=registry, orchestrator=orchestrator)
+    return Services(registry=registry, store=registry, orchestrator=orchestrator, settings=settings)
 
 
 TRAIN_DAG: Final = "train_model"
 EVALUATE_DAG: Final = "evaluate_and_promote"
+DEPLOY_DAG: Final = "deploy_candidate"
 
 
 def _print_version(value: bool) -> None:
@@ -277,3 +279,124 @@ def _wait_for_outcome(
     if not options.as_json:
         typer.echo(f"{name} v{info.version}: candidate")
     return "candidate"
+
+
+def _gate(services: Services, tags: dict[str, str] | Any) -> dict[str, Any]:  # noqa: ANN401
+    """Gate result, reasons and the two reports of one gate run (missing parts are None)."""
+    run_id = tags.get(Tag.GATE_EVAL_RUN_ID)
+    reports: dict[str, Any] = {"report": None, "champion_report": None}
+    for key, path in (("report", "gate/report.json"), ("champion_report", "gate/champion_report.json")):
+        if run_id:
+            try:
+                reports[key] = services.store.read_json(run_id, path)
+            except ModelportError:  # a first version has no champion report
+                reports[key] = None
+    return {
+        "result": tags.get(Tag.GATE_RESULT),
+        "reasons": json.loads(tags.get(Tag.GATE_REASONS) or "[]"),
+        **reports,
+    }
+
+
+def model_status(services: Services, name: str) -> dict[str, Any]:
+    """Everything `status` shows, as one JSON-ready dict.
+
+    Raises:
+        NotFoundError: no model has this name.
+    """
+    snapshot = services.registry.snapshot(name)
+    newest = services.registry.latest_version(name)
+    settings, orchestrator = services.settings, services.orchestrator
+    runs: list[tuple[str, str]] = []
+    latest_submission = services.registry.model_tags(name).get(Tag.LATEST_SUBMISSION_RUN_ID)
+    if latest_submission:
+        key = services.store.run_tags(latest_submission).get(Tag.SUBMISSION_KEY)
+        if key:
+            runs.append((TRAIN_DAG, submit_run_id(name, key)))
+    if newest is not None:
+        runs += [
+            (EVALUATE_DAG, evaluate_run_id(name, newest.version)),
+            (DEPLOY_DAG, deploy_run_id(name, newest.version)),
+        ]
+    airflow = []
+    for dag_id, run_id in runs:
+        info = orchestrator.get_run(dag_id, run_id)
+        airflow.append(
+            {
+                "dag_id": dag_id,
+                "run_id": run_id,
+                "state": info.state if info else "not started",
+                "url": f"{settings.airflow_url}/dags/{dag_id}/runs/{run_id}",
+            }
+        )
+    return {
+        "model": name,
+        "aliases": {
+            "champion": snapshot.champion,
+            "previous": snapshot.previous,
+            "candidate": snapshot.candidate,
+        },
+        "newest": None
+        if newest is None
+        else {"version": newest.version, "state": str(newest.state), "gate": _gate(services, newest.tags)},
+        "airflow": airflow,
+        "links": {
+            "mlflow": f"{settings.mlflow_url}/#/models/{name}",
+            "ray": f"{settings.ray_dashboard_url}/#/jobs",
+            "airflow": f"{settings.airflow_url}/dags",
+        },
+    }
+
+
+def _render_status(status: dict[str, Any]) -> None:
+    aliases = status["aliases"]
+    typer.echo(status["model"])
+    typer.echo("  " + "   ".join(f"{a} {'v' + v if v else '-'}" for a, v in aliases.items()))
+    newest = status["newest"]
+    if newest is None:
+        typer.echo("  no versions yet")
+    else:
+        gate = newest["gate"]
+        typer.echo(f"  newest v{newest['version']}: {newest['state']}, gate {gate['result'] or 'not run'}")
+        for reason in gate["reasons"]:
+            typer.echo(f"    - {reason}")
+        report, champion = gate["report"], gate["champion_report"]
+        if report:
+            header = f"  {report['metric_name']:<24}{'v' + report['version']:>10}"
+            header += f"{'champion v' + champion['version']:>16}" if champion else ""
+            typer.echo(header)
+
+            def row(label: str, ours: float, theirs: float | None, fmt: str = ".3f") -> None:
+                line = f"  {label:<24}{ours:>10{fmt}}"
+                typer.echo(line + (f"{theirs:>16{fmt}}" if theirs is not None else ""))
+
+            row("metric", report["metric"], champion["metric"] if champion else None)
+            for label, value in report["per_class"].items():
+                row(f"  {label}", value, champion["per_class"].get(label) if champion else None)
+            latency = f"latency ms (batch {report['latency_batch_size']})"
+            row(
+                latency,
+                report["latency_ms_median"],
+                champion["latency_ms_median"] if champion else None,
+                ".1f",
+            )
+    for run in status["airflow"]:
+        typer.echo(f"  {run['dag_id']:<22}{run['state']:<13}{run['url']}")
+    for label, url in status["links"].items():
+        typer.echo(f"  {label:<8}{url}")
+
+
+@app.command()
+def status(
+    ctx: typer.Context,
+    name: Annotated[
+        str, typer.Argument(metavar="NAME", help="Model name (from model.yaml).", show_default=False)
+    ],
+) -> None:
+    """Show aliases, the latest version's stage, links to Airflow, Ray and MLflow, and its gate report."""
+    with handled(ctx) as options:
+        result = model_status(build_services(), name)
+        if options.as_json:
+            render.emit_json(result)
+        else:
+            _render_status(result)

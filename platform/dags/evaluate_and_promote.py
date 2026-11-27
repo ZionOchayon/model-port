@@ -139,6 +139,8 @@ def decide_version(
     )
     spec: ModelSpec = dagkit.spec_for_version(registry, registry.get_version(model, version))
     decision = decide(candidate, champion, GatePolicy.from_spec(spec.evaluation))
+    if champion is not None:  # `modelport status` shows both reports of this gate run side by side
+        registry.log_json(prepared["candidate_run"], "gate/champion_report.json", champion.to_json())
     reasons = list(decision.reasons)
     registry.set_version_tags(
         model,

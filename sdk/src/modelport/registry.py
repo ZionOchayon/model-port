@@ -94,6 +94,9 @@ class ModelRegistry(Protocol):
     def model_uri(self, name: str, version: str) -> str:
         """`models:/<name>/<version>`."""
 
+    def latest_version(self, name: str) -> VersionInfo | None:
+        """The highest-numbered version, or None for a model without versions."""
+
 
 class ArtifactStore(Protocol):
     """Submission runs and run artifacts."""
@@ -118,6 +121,9 @@ class ArtifactStore(Protocol):
 
     def run_url(self, run_id: str) -> str:
         """Link to the run in the MLflow UI."""
+
+    def run_tags(self, run_id: str) -> Mapping[str, str]:
+        """All tags of one run."""
 
 
 def _code(err: MlflowException) -> str:
@@ -252,6 +258,13 @@ class MlflowRegistry:
         if not found:
             return None
         return self._info(max(found, key=lambda mv: int(mv.version)))
+
+    def latest_version(self, name: str) -> VersionInfo | None:
+        """The highest-numbered version, or None."""
+        query = f"name = {_quoted(name)}"
+        order = ["version_number DESC"]
+        found = self._call(lambda: self.client.search_model_versions(query, order_by=order, max_results=1))
+        return self._info(found[0]) if found else None
 
     def set_version_tags(self, name: str, version: str, tags: Mapping[Tag, str]) -> None:
         """Set tags on one version."""

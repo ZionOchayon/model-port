@@ -170,3 +170,10 @@ def test_run_tags(registry):
         "e", "r", Tag.TRAIN_RAYJOB, {Tag.TRAIN_RAYJOB: "r", Tag.CODE_SHA256: "c"}, {}
     )
     assert registry.run_tags(run_id)[Tag.CODE_SHA256] == "c"
+
+
+def test_latest_version(registry):
+    registry.ensure_registered_model("image-classifier", {})
+    assert registry.latest_version("image-classifier") is None
+    versions = [version(registry, "image-classifier") for _ in range(11)]
+    assert registry.latest_version("image-classifier").version == versions[-1] == "11"  # numeric, not "9"

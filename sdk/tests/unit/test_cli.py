@@ -93,6 +93,13 @@ class FakeOrchestrator:
     def has_dag(self, dag_id):
         return dag_id in self.dags
 
+    def get_run(self, dag_id, run_id):
+        from modelport.clients.airflow import DagRunInfo
+
+        if not any(t[1] == run_id for t in self.triggered):
+            return None
+        return DagRunInfo(dag_id, run_id, "success", None, None, {}, f"http://airflow/{run_id}")
+
     def wait(self, dag_id, run_id, *, timeout_s, poll_s=10.0):
         from modelport.clients.airflow import DagRunInfo
 
@@ -103,7 +110,12 @@ class FakeOrchestrator:
 @pytest.fixture
 def services(monkeypatch, memory_registry):
     orchestrator = FakeOrchestrator()
-    svc = main.Services(registry=memory_registry, store=memory_registry, orchestrator=orchestrator)
+    settings = main.ClientSettings.from_env(
+        {"MODELPORT_AIRFLOW_PASSWORD": "pw"}, credentials_file=Path("/none")
+    )
+    svc = main.Services(
+        registry=memory_registry, store=memory_registry, orchestrator=orchestrator, settings=settings
+    )
     monkeypatch.setattr(main, "build_services", lambda: svc)
     return svc
 
@@ -119,7 +131,7 @@ def test_submit_triggers_train_with_deterministic_run_id(services):
     assert result.exit_code == 0, result.output
     ((dag_id, run_id, conf),) = services.orchestrator.triggered
     (submission,) = services.registry.runs
-    key = services.registry.runs[submission]["tags"]["key"]
+    key = services.registry.runs[submission]["tags"][Tag.SUBMISSION_KEY]
     assert (dag_id, run_id) == ("train_model", submit_run_id("toy-model", key))
     assert conf == {
         "model": "toy-model",
@@ -192,3 +204,84 @@ def test_submit_wait_rejected_exit_8(services):
     )
     assert result.exit_code == 8, result.output
     assert "rejected: macro_f1 0.41 < 0.70" in result.output
+
+
+def _gate_report(version, metric, per_class):
+    return {
+        "model": "toy-model",
+        "version": version,
+        "val_uri": "s3://datasets/toy/v1/val.parquet",
+        "n_samples": 100,
+        "metric_name": "f1_macro",
+        "metric": metric,
+        "per_class": per_class,
+        "latency_ms_median": 4.2,
+        "latency_batch_size": 256,
+        "created_at": "2026-11-27T10:00:00Z",
+    }
+
+
+@pytest.fixture
+def decided_model(services):
+    from modelport.naming import Alias, Tag
+
+    reg = services.registry
+    reg.ensure_registered_model("toy-model", {})
+    reg.add_version("toy-model", {Tag.STATE: "champion"})
+    reg.add_version(
+        "toy-model",
+        {
+            Tag.STATE: "candidate",
+            Tag.GATE_RESULT: "passed",
+            Tag.GATE_REASONS: "[]",
+            Tag.GATE_EVAL_RUN_ID: "eval-2",
+        },
+    )
+    reg.aliases["toy-model"].update({Alias.CHAMPION: "1", Alias.CANDIDATE: "2"})
+    reg.log_json("eval-2", "gate/report.json", _gate_report("2", 0.91, {"a": 0.9, "b": 0.92}))
+    reg.log_json("eval-2", "gate/champion_report.json", _gate_report("1", 0.85, {"a": 0.84, "b": 0.86}))
+    return services
+
+
+def test_status_shows_aliases_gate_and_links(decided_model):
+    result = run("status", "toy-model")
+    assert result.exit_code == 0, result.output
+    out = result.output
+    assert "champion v1" in out
+    assert "candidate v2" in out
+    assert "previous -" in out
+    assert "newest v2: candidate, gate passed" in out
+    assert "0.910" in out  # the version's metric
+    assert "0.850" in out  # the champion's metric
+    assert "http://localhost:5000/#/models/toy-model" in out
+    assert "http://localhost:8265/#/jobs" in out
+    assert "evaluate__toy-model__v2" in out
+
+
+def test_status_json(decided_model):
+    result = run("--json", "status", "toy-model")
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["aliases"] == {"champion": "1", "previous": None, "candidate": "2"}
+    assert payload["newest"]["gate"]["report"]["metric"] == 0.91
+    assert payload["newest"]["gate"]["champion_report"]["metric"] == 0.85
+
+
+def test_status_rejected_shows_reasons(services):
+    from modelport.naming import Tag
+
+    services.registry.ensure_registered_model("toy-model", {})
+    services.registry.add_version(
+        "toy-model",
+        {Tag.STATE: "rejected", Tag.GATE_RESULT: "failed", Tag.GATE_REASONS: '["f1_macro 0.4 < 0.5"]'},
+    )
+    result = run("status", "toy-model")
+    assert result.exit_code == 0, result.output
+    assert "newest v1: rejected, gate failed" in result.output
+    assert "f1_macro 0.4 < 0.5" in result.output
+
+
+def test_status_unknown_model_exit_7(services):
+    result = run("status", "nope-model")
+    assert result.exit_code == 7
+    assert "No model named 'nope-model'" in result.output

@@ -32,6 +32,8 @@ All notable changes to this project are documented here. The format follows
   (retrain subscribed models on a new dataset version); `make ui`; CI DAG tests.
 - Ingest: quality checks against a dataset contract, immutable dataset versions (manifest written last)
   and quarantine with a report.
+- `modelport status NAME`: aliases, the newest version's state and gate report next to the champion's,
+  the Airflow runs of the latest submission, and links to MLflow, Ray and Airflow.
 - Airflow DAG `evaluate_and_promote`: the new version and the champion are evaluated on the same
   validation set, the gate decides, and the version becomes `candidate` or `rejected` with reasons;
   `train_model` starts it after registration. Lifecycle and job-timing pushes to a Pushgateway.
