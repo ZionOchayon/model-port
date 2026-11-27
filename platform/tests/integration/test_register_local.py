@@ -60,7 +60,7 @@ def setup(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     model_dir = tmp_path / "model"
     (model_dir / "example").mkdir(parents=True)
-    (model_dir / "model.yaml").write_text(SPEC, encoding="utf-8")
+    (model_dir / "model.tiny.yaml").write_text(SPEC, encoding="utf-8")
     (model_dir / "tiny_model.py").write_text(textwrap.dedent(MODEL), encoding="utf-8")
     val = pd.DataFrame({"x": np.random.default_rng(0).random(800)})
     val.head(5).to_parquet(model_dir / "example" / "input.parquet")
@@ -91,8 +91,8 @@ def setup(tmp_path, monkeypatch):
         framework=Framework.XGBOOST,
     )
     kwargs = {
-        "spec": load_spec(model_dir / "model.yaml"),
-        "spec_path": model_dir / "model.yaml",
+        "spec": load_spec(model_dir / "model.tiny.yaml"),
+        "spec_path": model_dir / "model.tiny.yaml",
         "model_dir": model_dir,
         "weights_dir": tmp_path / "weights",
         "val": val,

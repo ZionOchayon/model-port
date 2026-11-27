@@ -2,6 +2,7 @@
 
 import dataclasses
 import json
+import shutil
 import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -98,7 +99,9 @@ def register_version(
     # built before the version exists, so a model that cannot predict on val never gets registered
     baseline = build_baseline(model, val, model_name=spec.name, version="", bins=spec.drift.bins)
     with mlflow.start_run(run_id=lineage.train_run_id), tempfile.TemporaryDirectory() as tmp:
-        mlflow.log_artifact(str(spec_path), "spec")
+        spec_copy = Path(tmp) / "model.yaml"  # always spec/model.yaml, whatever the submitted file was called
+        shutil.copyfile(spec_path, spec_copy)
+        mlflow.log_artifact(str(spec_copy), "spec")
         example_path = Path(tmp) / "input.parquet"
         example.to_parquet(example_path, index=False)
         mlflow.log_artifact(str(example_path), "example")

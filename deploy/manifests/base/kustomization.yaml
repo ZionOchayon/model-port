@@ -7,3 +7,4 @@ resources:
   - buckets-job.yaml
   - mlflow.yaml
   - airflow-rbac.yaml
+  - shared-raycluster.yaml

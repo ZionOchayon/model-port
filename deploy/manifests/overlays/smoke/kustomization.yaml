@@ -2,6 +2,13 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources: [../../base]
 patches:
+  - target: { kind: RayCluster, name: modelport-shared }
+    patch: |
+      - {op: replace, path: /spec/workerGroupSpecs/0/maxReplicas, value: 1}
+      - {op: replace, path: /spec/workerGroupSpecs/0/template/spec/containers/0/resources/requests, value: {cpu: 250m, memory: 2Gi}}
+      - {op: replace, path: /spec/workerGroupSpecs/0/template/spec/containers/0/resources/limits, value: {cpu: "2", memory: 3Gi}}
+      - {op: replace, path: /spec/headGroupSpec/template/spec/containers/0/resources/requests, value: {cpu: 200m, memory: 1536Mi}}
+      - {op: replace, path: /spec/headGroupSpec/template/spec/containers/0/resources/limits, value: {cpu: "1", memory: 3Gi}}
   - target: { kind: StatefulSet, name: postgres }
     patch: |
       - {op: replace, path: /spec/template/spec/containers/0/resources/requests/cpu, value: 50m}
