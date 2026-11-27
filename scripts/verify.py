@@ -93,6 +93,19 @@ def missing_steps(steps: Iterable[int], *, epochs: int) -> list[int]:
     return sorted(set(range(epochs)) - set(steps))
 
 
+def resume_problems(steps: Sequence[int], *, epochs: int, resumed_from: Sequence[float]) -> list[str]:
+    """Evidence that a killed run resumed: every epoch logged, epoch 0 once, some epoch resumed."""
+    problems = []
+    missing = missing_steps(steps, epochs=epochs)
+    if missing:
+        problems.append(f"epoch steps {missing} missing")
+    if list(steps).count(0) > 1:
+        problems.append(f"epoch step 0 logged {list(steps).count(0)} times (training restarted, not resumed)")
+    if not any(v > 0 for v in resumed_from):
+        problems.append("no epoch resumed from a checkpoint (resumed_from stayed 0)")
+    return problems
+
+
 def missing_lineage(tags: Mapping[str, str]) -> list[str]:
     """Lineage tag keys that are absent or empty."""
     return [k for k in LINEAGE_TAGS if not tags.get(k)]
@@ -297,11 +310,43 @@ def v08(ctx: Context) -> None:
     require(run and run.state == "success", f"retrain run is {run.state if run else 'absent'}")
 
 
+DRILL_KILL_WORKER = ROOT / ".data" / "drill-kill-worker.json"
+
+
+def v05d(ctx: Context) -> None:
+    """After bench/drills/kill_worker.sh: the run succeeded and resumed from epoch 0's checkpoint."""
+    from modelport.naming import Tag
+
+    require(
+        DRILL_KILL_WORKER.is_file(), f"{DRILL_KILL_WORKER.relative_to(ROOT)} missing (run the drill first)"
+    )
+    drill = json.loads(DRILL_KILL_WORKER.read_text(encoding="utf-8"))
+    run = ctx.airflow.get_run("train_model", drill["run_id"])
+    require(
+        run and run.state == "success", f"drill run {drill['run_id']} is {run.state if run else 'absent'}"
+    )
+    info = ctx.registry.find_version_by_tag(ctx.model, Tag.TRAIN_RAYJOB, drill["rayjob"])
+    require(info, f"no version from RayJob {drill['rayjob']}")
+    client, train_run = ctx.registry.client, info.tags[Tag.TRAIN_RUN_ID]
+    saved = client.get_metric_history(train_run, "checkpoint_saved")
+    resumed = client.get_metric_history(train_run, "resumed_from")
+    first_zero = min((m.timestamp for m in saved if m.step == 0), default=None)
+    require(first_zero is not None, "epoch 0's checkpoint was never registered")
+    require(
+        drill["killed_at_ms"] > first_zero, "the worker was killed before epoch 0's checkpoint was registered"
+    )
+    problems = resume_problems(
+        [m.step for m in saved], epochs=int(drill["epochs"]), resumed_from=[m.value for m in resumed]
+    )
+    require(not problems, "; ".join(problems))
+
+
 CHECKS: dict[str, Callable[[Context], None]] = {
     "V-01": v01,
     "V-02": v02,
     "V-04": v04,
     "V-05": v05,
+    "V-05d": v05d,
     "V-06": v06,
     "V-07a": v07a,
     "V-07b": v07b,

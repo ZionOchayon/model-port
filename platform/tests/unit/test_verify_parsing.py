@@ -76,3 +76,22 @@ def test_ops_run_state_and_row_hashes():
     assert ops.row_hashes(a) == ops.row_hashes(b)
     c = a.assign(confidence=[0.5, 0.26])
     assert ops.row_hashes(a) != ops.row_hashes(c)
+
+
+def test_snapshot_has_checkpoint():
+    import ops
+
+    assert ops.snapshot_has_checkpoint(
+        '{"checkpoint_results": [{"checkpoint_dir_name": "checkpoint_2026-11-27_10"}]}'
+    )
+    assert not ops.snapshot_has_checkpoint('{"checkpoint_results": []}')
+    assert not ops.snapshot_has_checkpoint("not json")
+
+
+def test_resume_evidence():
+    assert verify.resume_problems([0, 1, 2, 3], epochs=4, resumed_from=[0, 0, 2, 2]) == []
+    assert "logged 2 times" in verify.resume_problems([0, 0, 1, 2, 3], epochs=4, resumed_from=[0, 0, 0, 0])[0]
+    assert verify.resume_problems([0, 1, 2, 3], epochs=4, resumed_from=[0, 0, 0, 0]) == [
+        "no epoch resumed from a checkpoint (resumed_from stayed 0)"
+    ]
+    assert verify.resume_problems([0, 1], epochs=4, resumed_from=[0, 1]) == ["epoch steps [2, 3] missing"]

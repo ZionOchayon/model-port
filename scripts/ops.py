@@ -11,6 +11,7 @@ Commands:
   wait-alias <model> <alias> [--timeout S]         the alias exists in MLflow
   trigger <dag_id> <run_id> [--conf JSON] [--wait] [--timeout S]   start a DAG run (idempotent)
   snapshot-predictions --day D --out FILE          row counts and row hashes of s3://predictions/*/<D>/
+  wait-checkpoint <model> <rayjob> [--timeout S]   Ray Train registered a checkpoint of that run
 """
 
 from __future__ import annotations
@@ -201,6 +202,28 @@ def snapshot_predictions(args: argparse.Namespace) -> int:
     return 0 if snapshot else 1
 
 
+def snapshot_has_checkpoint(text: str) -> bool:
+    """Whether a Ray Train checkpoint-manager snapshot lists at least one checkpoint."""
+    try:
+        state = json.loads(text)
+    except ValueError:
+        return False
+    return "checkpoint_" in json.dumps(state.get("checkpoint_results", state))
+
+
+def wait_checkpoint(args: argparse.Namespace) -> int:
+    """Wait until Ray Train has registered a checkpoint for the RayJob's run."""
+    from modelport.naming import checkpoint_root
+
+    uri = f"{checkpoint_root(args.model)}/{args.rayjob}/checkpoint_manager_snapshot.json"
+    store = dataset_store()
+    return poll(
+        f"wait-checkpoint {uri}",
+        lambda: store.exists(uri) and snapshot_has_checkpoint(store.read_bytes(uri).decode("utf-8")),
+        args.timeout,
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     """Dispatch a subcommand."""
     parser = argparse.ArgumentParser(description="modelport platform operations")
@@ -236,6 +259,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--day", required=True)
     p.add_argument("--out", required=True)
     p.set_defaults(run=snapshot_predictions)
+    p = sub.add_parser("wait-checkpoint", help="wait for a registered Ray Train checkpoint of a RayJob")
+    p.add_argument("model")
+    p.add_argument("rayjob")
+    p.add_argument("--timeout", type=float, default=1800)
+    p.set_defaults(run=wait_checkpoint)
     args = parser.parse_args(argv)
     code: int = args.run(args)
     return code

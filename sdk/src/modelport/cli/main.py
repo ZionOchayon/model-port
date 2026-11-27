@@ -5,6 +5,7 @@ Each command parses its options, calls one service function and renders the resu
 """
 
 import json
+import os
 import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -117,6 +118,9 @@ def main(
     ] = False,
 ) -> None:
     """Put a model into production with one command: train, evaluate, serve and monitor it."""
+    os.environ.setdefault(
+        "MLFLOW_SUPPRESS_PRINTING_URL_TO_STDOUT", "true"
+    )  # we print our own links; keeps --json clean
     configure_logging(json=as_json, level="DEBUG" if debug else "WARNING")
     ctx.obj = Options(debug=debug, as_json=as_json)
 

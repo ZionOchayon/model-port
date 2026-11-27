@@ -285,3 +285,14 @@ def test_status_unknown_model_exit_7(services):
     result = run("status", "nope-model")
     assert result.exit_code == 7
     assert "No model named 'nope-model'" in result.output
+
+
+def test_submit_json_is_one_document(services, monkeypatch):
+    import os
+
+    monkeypatch.delenv("MLFLOW_SUPPRESS_PRINTING_URL_TO_STDOUT", raising=False)
+    result = run("--json", "submit", str(FIXTURES / "valid_model"))
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output)["train_run_id"].startswith("submit__toy-model__")
+    # MLflow would otherwise print "View run ..." lines into stdout and break --json
+    assert os.environ["MLFLOW_SUPPRESS_PRINTING_URL_TO_STDOUT"] == "true"

@@ -8,6 +8,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Worker-failure drill (`bench/drills/kill_worker.sh`): a Ray Train worker is killed after the first
+  checkpoint, and `verify.py` V-05d checks that training resumed instead of restarting.
 - Repository skeleton: uv workspace with the `modelport` SDK and `modelport-platform` packages,
   pinned `versions.env`, `Makefile`, license and dataset credits.
 - Development toolbox: `docker compose run --rm toolbox make <target>` runs every target with the

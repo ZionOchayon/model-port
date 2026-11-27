@@ -28,7 +28,8 @@ group uv run python examples/datasets/prepare.py --dataset fashion-mnist --rows 
 group ops wait-dag-run train_model retrain__fashion-classifier__fashion-mnist__v2 --state success --timeout 3600
 # the retrain is version 3 (1 good, 2 broken); its evaluation runs on the shared cluster after train_model ends
 group ops wait-dag-run evaluate_and_promote evaluate__fashion-classifier__v3 --state success --timeout 1800
-checks=V-01,V-02,V-04,V-05,V-06,V-07a,V-07b,V-08
+group bash bench/drills/kill_worker.sh fashion-classifier
+checks=V-01,V-02,V-04,V-05,V-05d,V-06,V-07a,V-07b,V-08
 
 if [[ $STAGE != v0.1 ]]; then
   echo "e2e: stage $STAGE is not implemented yet" >&2
