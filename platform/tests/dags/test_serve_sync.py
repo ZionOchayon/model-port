@@ -162,3 +162,13 @@ def test_dag_paths():
     for before, after in itertools.pairwise(order):
         assert after in dag_module.DAG.get_task(before).downstream_task_ids, (before, after)
     assert dag_module.DAG.get_task("apply_aliases").trigger_rule == "none_failed_min_one_success"
+
+
+def test_apply_aliases_retry_after_success_is_a_no_op():
+    reg = registry()
+    dag_module.apply_aliases(reg, MODEL, "rollback", "1", None)
+    dag_module.apply_aliases(reg, MODEL, "rollback", "1", None)  # a retry: the aliases already moved
+    assert reg.snapshot(MODEL).champion == "1"
+    dag_module.apply_aliases(reg, MODEL, "promote", "3", None)
+    dag_module.apply_aliases(reg, MODEL, "promote", "3", None)
+    assert (reg.snapshot(MODEL).champion, reg.snapshot(MODEL).previous) == ("3", "1")

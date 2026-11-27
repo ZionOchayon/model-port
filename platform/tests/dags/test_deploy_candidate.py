@@ -256,3 +256,17 @@ def test_canary_traffic_reads_validation_rows(monkeypatch):
     )
     assert result == {"sent": 10, "failed": 0, "status_counts": {"200": 10}}
     assert seen == {"model": MODEL, "rows": 2, "rps": 5.0, "duration_s": 600, "inputs": 12}
+
+
+def test_alias_tasks_are_safe_to_retry():
+    # a task can fail after its registry writes (the worker dies); its retry must not refuse
+    reg, kube = registry(), Kube()
+    start(reg, kube)
+    dag_module.promote_aliases(reg, MODEL, "2", None)
+    dag_module.promote_aliases(reg, MODEL, "2", None)
+    assert (reg.snapshot(MODEL).champion, reg.snapshot(MODEL).previous) == ("2", "1")
+    reg, kube = registry(), Kube()
+    start(reg, kube)
+    dag_module.mark_rejected(reg, MODEL, "2", None)
+    dag_module.mark_rejected(reg, MODEL, "2", None)
+    assert reg.get_version(MODEL, "2").state is ModelState.REJECTED

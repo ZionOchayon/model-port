@@ -143,7 +143,9 @@ def judge(
 
 
 def promote_aliases(reg: ServeRegistry, model: str, version: str, pushgateway_url: str | None) -> None:
-    """Make the candidate the champion; the old champion becomes previous."""
+    """Make the candidate the champion; the old champion becomes previous. A retry after that is a no-op."""
+    if reg.snapshot(model).champion == version:
+        return
     plan = plan_promote(
         reg.snapshot(model), version, event=Event.CANARY_PASSED, current_state=ModelState.CANDIDATE
     )
@@ -158,7 +160,9 @@ def apply_now(reg: ServeRegistry, k: KubeApi, s: PlatformSettings) -> list[str]:
 
 
 def mark_rejected(reg: ServeRegistry, model: str, version: str, pushgateway_url: str | None) -> None:
-    """The version is rejected and loses the candidate alias."""
+    """The version is rejected and loses the candidate alias. A retry after that is a no-op."""
+    if reg.get_version(model, version).state is ModelState.REJECTED:
+        return
     reg.apply_plan(model, plan_canary_failed(reg.snapshot(model), version))
     push_aliases(pushgateway_url, model, reg.snapshot(model))
     _log.info("canary.rolled_back", model=model, version=version)

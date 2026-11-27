@@ -63,8 +63,14 @@ def staging_choice(planned: dict[str, Any]) -> str:
 def apply_aliases(
     reg: ServeRegistry, model: str, action: str, target: str, pushgateway_url: str | None
 ) -> None:
-    """Move the aliases: the target becomes champion (promote), or previous comes back (rollback)."""
+    """Move the aliases: the target becomes champion (promote), or previous comes back (rollback).
+
+    A retry after the aliases already moved does nothing.
+    """
     snapshot = reg.snapshot(model)
+    if snapshot.champion == target:
+        _log.info("serve_sync.aliases_already_moved", model=model, action=action, version=target)
+        return
     try:
         if action == "rollback":
             plan_ = plan_rollback(snapshot)
@@ -75,7 +81,7 @@ def apply_aliases(
         raise _refuse(err.what, err.fix) from err
     reg.apply_plan(model, plan_)
     push_aliases(pushgateway_url, model, reg.snapshot(model))
-    _log.info("serve_sync.aliases", model=model, action=action, target=target)
+    _log.info("serve_sync.aliases", model=model, action=action, version=target)
 
 
 @dag(

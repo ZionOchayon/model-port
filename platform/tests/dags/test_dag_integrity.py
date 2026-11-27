@@ -66,3 +66,20 @@ def test_pools_referenced_exist_in_up_script(dagbag):
     up = (ROOT / "scripts" / "up.sh").read_text(encoding="utf-8")
     for pool in Pool:
         assert re.search(rf'"{pool.value} ', up), f"up.sh does not create pool {pool.value}"
+
+
+def test_no_log_field_the_task_supervisor_reserves():
+    # Airflow's supervisor forwards a task's log events as _log_to_target(target, level, msg, **event):
+    # an event field with one of these names kills the task after its work is done
+    import ast
+
+    reserved = {"target", "level", "msg"}
+    levels = {"debug", "info", "warning", "error", "exception", "critical"}
+    found = []
+    for folder in (DAG_FOLDER, ROOT / "platform" / "src", ROOT / "sdk" / "src"):
+        for path in folder.rglob("*.py"):
+            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+                if isinstance(node, ast.Call) and getattr(node.func, "attr", None) in levels:
+                    names = [k.arg for k in node.keywords if k.arg in reserved]
+                    found += [f"{path.name}:{node.lineno}:{name}" for name in names]
+    assert found == []
