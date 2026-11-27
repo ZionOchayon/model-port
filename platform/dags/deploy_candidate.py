@@ -32,7 +32,6 @@ from modelport_platform.settings import PlatformSettings
 from modelport_platform.tools.loadgen import run_load
 
 _log = get_logger(__name__)
-SERVE_TAGS = (Tag.SERVE_CANDIDATE_VERSION, Tag.SERVE_CANDIDATE_WEIGHT, Tag.SERVE_FAULT_ERROR_RATE)
 CANARY_RPS = 5.0
 
 
@@ -143,12 +142,6 @@ def judge(
     return {"passed": passed, "reasons": reasons}
 
 
-def route_all_to_candidate(reg: ServeRegistry, k: KubeApi, s: PlatformSettings, model: str) -> list[str]:
-    """Every request to the candidate app (already RUNNING); the champion app gets none."""
-    reg.set_model_tags(model, {Tag.SERVE_CANDIDATE_WEIGHT: "1.0"})
-    return dagkit.apply_serve_state(reg, k, s)
-
-
 def promote_aliases(reg: ServeRegistry, model: str, version: str, pushgateway_url: str | None) -> None:
     """Make the candidate the champion; the old champion becomes previous."""
     plan = plan_promote(
@@ -161,12 +154,6 @@ def promote_aliases(reg: ServeRegistry, model: str, version: str, pushgateway_ur
 
 def apply_now(reg: ServeRegistry, k: KubeApi, s: PlatformSettings) -> list[str]:
     """Render and apply the current serve state (the champion app follows the champion alias)."""
-    return dagkit.apply_serve_state(reg, k, s)
-
-
-def clear_serve_candidate(reg: ServeRegistry, k: KubeApi, s: PlatformSettings, model: str) -> list[str]:
-    """Stop serving the candidate app (router weight back to 0)."""
-    reg.set_model_tags(model, {tag: "" for tag in SERVE_TAGS})  # empty means unset
     return dagkit.apply_serve_state(reg, k, s)
 
 
@@ -326,17 +313,17 @@ def deploy_candidate() -> None:
     observed >> verdict
     chosen = branch_task(verdict)
 
-    routed = serve_change("route_all_to_candidate", route_all_to_candidate)()
+    routed = serve_change("route_all_to_candidate", dagkit.route_all_to_candidate)()
     chosen >> routed
     promoted = promote_task()
     wait("wait_route")(routed) >> promoted
     updated = serve_change("update_champion_app", lambda reg, k, s, _model: apply_now(reg, k, s))()
     promoted >> updated
-    retired = serve_change("retire_candidate_app", clear_serve_candidate)()
+    retired = serve_change("retire_candidate_app", dagkit.clear_serve_candidate)()
     wait("wait_champion_ready")(updated) >> retired
     wait("wait_final")(retired)
 
-    removed = serve_change("remove_candidate_app", clear_serve_candidate)()
+    removed = serve_change("remove_candidate_app", dagkit.clear_serve_candidate)()
     chosen >> removed
     rejected = reject_task()
     removed >> rejected

@@ -17,6 +17,7 @@ from modelport.naming import Alias, Tag
 pytest.importorskip("airflow.sdk")
 from airflow.sdk.exceptions import AirflowSkipException
 
+from modelport_platform import dagkit
 from modelport_platform.settings import PlatformSettings
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "dags"))
@@ -204,10 +205,10 @@ def test_branch_paths():
 def test_promote_path_order():
     reg, kube = registry(), Kube()
     start(reg, kube)
-    dag_module.route_all_to_candidate(reg, kube, SETTINGS, MODEL)
+    dagkit.route_all_to_candidate(reg, kube, SETTINGS, MODEL)
     dag_module.promote_aliases(reg, MODEL, "2", None)
     dag_module.apply_now(reg, kube, SETTINGS)
-    dag_module.clear_serve_candidate(reg, kube, SETTINGS, MODEL)
+    dagkit.clear_serve_candidate(reg, kube, SETTINGS, MODEL)
     assert [state(c) for c in kube.configs] == [
         ("1", "2", 0.1),  # canary beside the champion
         ("1", "2", 1.0),  # all traffic to the running candidate app; the champion app idles
@@ -221,7 +222,7 @@ def test_promote_path_order():
 def test_rollback_marks_rejected_and_removes_app():
     reg, kube = registry(), Kube()
     start(reg, kube)
-    dag_module.clear_serve_candidate(reg, kube, SETTINGS, MODEL)
+    dagkit.clear_serve_candidate(reg, kube, SETTINGS, MODEL)
     dag_module.mark_rejected(reg, MODEL, "2", None)
     assert state(kube.configs[-1]) == ("1", None, 0.0)
     snapshot = reg.snapshot(MODEL)

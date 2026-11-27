@@ -296,3 +296,64 @@ def test_submit_json_is_one_document(services, monkeypatch):
     assert json.loads(result.output)["train_run_id"].startswith("submit__toy-model__")
     # MLflow would otherwise print "View run ..." lines into stdout and break --json
     assert os.environ["MLFLOW_SUPPRESS_PRINTING_URL_TO_STDOUT"] == "true"
+
+
+def served(registry, *, gate_v2="passed", previous=True):
+    from modelport.naming import Alias, Tag
+
+    registry.add_version(
+        "tiny-model", {Tag.GATE_RESULT: "passed", Tag.STATE: "champion" if not previous else "previous"}
+    )
+    registry.add_version("tiny-model", {Tag.GATE_RESULT: "passed", Tag.STATE: "champion"})
+    registry.add_version(
+        "tiny-model",
+        {Tag.GATE_RESULT: gate_v2, Tag.STATE: "candidate" if gate_v2 == "passed" else "rejected"},
+    )
+    registry.aliases["tiny-model"][Alias.CHAMPION] = "2"
+    if previous:
+        registry.aliases["tiny-model"][Alias.PREVIOUS] = "1"
+
+
+def test_promote_refused_when_gate_failed_exit_8(services):
+    served(services.registry, gate_v2="failed")
+    result = run("promote", "tiny-model", "3", "--yes")
+    assert result.exit_code == 8
+    assert "did not pass the gate" in result.output
+    assert services.orchestrator.triggered == []
+
+
+def test_promote_triggers_serve_sync(services):
+    served(services.registry)
+    result = run("--json", "promote", "tiny-model", "3", "--yes", "--wait")
+    assert result.exit_code == 0, result.output
+    ((dag_id, run_id, conf),) = services.orchestrator.triggered
+    assert dag_id == "serve_sync"
+    assert run_id.startswith("promote__tiny-model__")
+    assert conf == {"model": "tiny-model", "action": "promote", "version": "3"}
+    assert services.orchestrator.waited == [("serve_sync", run_id)]
+    payload = json.loads(result.output)
+    assert (payload["action"], payload["target"]) == ("promote", "3")
+
+
+def test_promote_asks_for_confirmation(services):
+    served(services.registry)
+    result = runner.invoke(main.app, ["promote", "tiny-model", "3"], input="n\n")
+    assert result.exit_code == 1  # aborted
+    assert services.orchestrator.triggered == []
+
+
+def test_rollback_without_previous_exit_8(services):
+    served(services.registry, previous=False)
+    result = run("rollback", "tiny-model", "--yes")
+    assert result.exit_code == 8
+    assert "no previous version" in result.output
+
+
+def test_rollback_triggers_serve_sync(services):
+    served(services.registry)
+    result = run("rollback", "tiny-model", "--yes")
+    assert result.exit_code == 0, result.output
+    ((dag_id, run_id, conf),) = services.orchestrator.triggered
+    assert (dag_id, conf) == ("serve_sync", {"model": "tiny-model", "action": "rollback", "version": None})
+    assert run_id.startswith("rollback__tiny-model__")
+    assert "v1" in result.output

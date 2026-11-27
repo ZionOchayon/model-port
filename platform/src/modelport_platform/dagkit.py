@@ -188,3 +188,33 @@ def rayservice_ready_poke(
             return PokeReturnValue(is_done=True, xcom_value={"deploy_failed": failure})
         raise AirflowFailException(failure)
     return PokeReturnValue(is_done=ready, xcom_value={"deploy_failed": None} if ready else None)
+
+
+SERVE_TAGS: Final = (Tag.SERVE_CANDIDATE_VERSION, Tag.SERVE_CANDIDATE_WEIGHT, Tag.SERVE_FAULT_ERROR_RATE)
+
+
+def serve_target(
+    reg: ServeRegistry, k: KubeApi, s: PlatformSettings, model: str, version: str, weight: float
+) -> list[str]:
+    """Serve `version` as the model's second app with `weight` of the traffic (canary 0.1, staging 0.0)."""
+    reg.set_model_tags(
+        model,
+        {
+            Tag.SERVE_CANDIDATE_VERSION: version,
+            Tag.SERVE_CANDIDATE_WEIGHT: str(weight),
+            Tag.SERVE_FAULT_ERROR_RATE: "0.0",
+        },
+    )
+    return apply_serve_state(reg, k, s)
+
+
+def route_all_to_candidate(reg: ServeRegistry, k: KubeApi, s: PlatformSettings, model: str) -> list[str]:
+    """Every request to the second app (already RUNNING); the champion app gets none and can be updated."""
+    reg.set_model_tags(model, {Tag.SERVE_CANDIDATE_WEIGHT: "1.0"})
+    return apply_serve_state(reg, k, s)
+
+
+def clear_serve_candidate(reg: ServeRegistry, k: KubeApi, s: PlatformSettings, model: str) -> list[str]:
+    """Stop serving the second app; traffic returns to the champion app."""
+    reg.set_model_tags(model, {tag: "" for tag in SERVE_TAGS})  # empty means unset
+    return apply_serve_state(reg, k, s)

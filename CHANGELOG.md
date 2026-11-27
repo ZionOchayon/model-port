@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `modelport promote NAME VERSION` and `modelport rollback NAME` (with `--wait`, `--yes`): the Airflow DAG
+  `serve_sync` stages the target beside the champion, moves the traffic, then the aliases, with the same
+  zero-downtime swap as a canary; refused during a canary, for a version that did not pass the gate, or
+  without a previous version.
 - Airflow DAG `deploy_candidate`: a version that passed the gate is served beside the champion with a share
   of traffic (all of it for a model's first version), judged on live errors and latency, then promoted
   with zero downtime or rolled back and rejected with its reasons. A load generator sends the canary's

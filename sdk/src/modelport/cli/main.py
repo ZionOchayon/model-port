@@ -10,6 +10,7 @@ import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any, Final
 
@@ -28,8 +29,17 @@ from modelport.errors import (
     SignatureMismatchError,
     SpecError,
 )
+from modelport.lifecycle import ModelState
 from modelport.logs import configure_logging
-from modelport.naming import Tag, deploy_run_id, evaluate_run_id, rayjob_name, submission_key, submit_run_id
+from modelport.naming import (
+    Tag,
+    deploy_run_id,
+    evaluate_run_id,
+    rayjob_name,
+    serve_sync_run_id,
+    submission_key,
+    submit_run_id,
+)
 from modelport.packaging import build_code_zip
 from modelport.registry import ArtifactStore, MlflowRegistry, ModelRegistry
 from modelport.spec import spec_sha256
@@ -93,6 +103,7 @@ def build_services() -> Services:
 TRAIN_DAG: Final = "train_model"
 EVALUATE_DAG: Final = "evaluate_and_promote"
 DEPLOY_DAG: Final = "deploy_candidate"
+SERVE_DAG: Final = "serve_sync"
 
 
 def _print_version(value: bool) -> None:
@@ -404,3 +415,109 @@ def status(
             render.emit_json(result)
         else:
             _render_status(result)
+
+
+def serve_change(
+    services: Services, name: str, action: str, version: str | None, *, wait: bool, timeout: float
+) -> dict[str, Any]:
+    """Check what the change needs, then start `serve_sync` (and wait for it with `wait`).
+
+    Raises:
+        PromotionRefusedError: the version did not pass the gate (promote), or there is no previous
+            version (rollback).
+        NotFoundError: the model or version does not exist.
+    """
+    snapshot = services.registry.snapshot(name)
+    if action == "promote":
+        assert version is not None
+        info = services.registry.get_version(name, version)
+        if info.tags.get(Tag.GATE_RESULT) != "passed" or info.state is ModelState.REJECTED:
+            raise PromotionRefusedError(
+                what=f"{name} v{version} did not pass the gate",
+                fix=f"`modelport status {name}` shows the reasons; promote a version that passed.",
+            )
+        target = version
+    else:
+        if snapshot.previous is None:
+            raise PromotionRefusedError(
+                what=f"{name} has no previous version to roll back to",
+                fix=f"Promote a specific version with `modelport promote {name} <version>`.",
+            )
+        target = snapshot.previous
+    run_id = serve_sync_run_id(action, name, datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ"))
+    conf = {"model": name, "action": action, "version": version}
+    ref = services.orchestrator.trigger(SERVE_DAG, run_id, conf)
+    result: dict[str, Any] = {
+        "model": name,
+        "action": action,
+        "target": target,
+        "run_id": run_id,
+        "url": ref.url,
+    }
+    if wait:
+        services.orchestrator.wait(SERVE_DAG, run_id, timeout_s=timeout)
+        after = services.registry.snapshot(name)
+        result["aliases"] = {
+            "champion": after.champion,
+            "previous": after.previous,
+            "candidate": after.candidate,
+        }
+    return result
+
+
+def _serve_command(
+    ctx: typer.Context, name: str, action: str, version: str | None, wait: bool, timeout: float, yes: bool
+) -> None:
+    with handled(ctx) as options:
+        services = build_services()
+        if not yes:
+            target = f"v{version}" if version else "the previous version"
+            typer.confirm(f"Make {target} the champion of {name}?", abort=True, err=True)
+        result = serve_change(services, name, action, version, wait=wait, timeout=timeout)
+        if options.as_json:
+            render.emit_json(result)
+            return
+        typer.echo(f"{action.capitalize()} {name} to v{result['target']}: {result['url']}")
+        if wait:
+            aliases = result["aliases"]
+            typer.echo(f"  champion v{aliases['champion']}   previous {aliases['previous'] or '-'}")
+        else:
+            typer.echo(f"Next: modelport status {name}")
+
+
+WaitOption = Annotated[bool, typer.Option("--wait", help="Block until serving runs the new champion.")]
+TimeoutOption = Annotated[
+    float, typer.Option("--timeout", metavar="SECONDS", min=1, help="With --wait, give up after this long.")
+]
+YesOption = Annotated[bool, typer.Option("--yes", help="Do not ask for confirmation.")]
+NameArgument = Annotated[
+    str, typer.Argument(metavar="NAME", help="Model name (from model.yaml).", show_default=False)
+]
+
+
+@app.command()
+def promote(
+    ctx: typer.Context,
+    name: NameArgument,
+    version: Annotated[
+        str,
+        typer.Argument(metavar="VERSION", help="Version number to make the champion.", show_default=False),
+    ],
+    wait: WaitOption = False,
+    timeout: TimeoutOption = 1800,
+    yes: YesOption = False,
+) -> None:
+    """Make VERSION the champion (only if it passed the gate) and update serving."""
+    _serve_command(ctx, name, "promote", version, wait, timeout, yes)
+
+
+@app.command()
+def rollback(
+    ctx: typer.Context,
+    name: NameArgument,
+    wait: WaitOption = False,
+    timeout: TimeoutOption = 1800,
+    yes: YesOption = False,
+) -> None:
+    """Make the previous champion the champion again and update serving."""
+    _serve_command(ctx, name, "rollback", None, wait, timeout, yes)
