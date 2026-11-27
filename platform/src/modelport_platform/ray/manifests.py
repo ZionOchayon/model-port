@@ -93,6 +93,8 @@ HEAD_PORTS: Final = [
     {"containerPort": 8080, "name": "metrics"},
 ]
 WORKER_PORTS: Final = [{"containerPort": 8080, "name": "metrics"}]
+# KubeRay creates the Serve Service only when the head container has a port named `serve`
+SERVE_HEAD_PORTS: Final = [*HEAD_PORTS, {"containerPort": 8000, "name": "serve"}]
 
 
 def _cluster_spec(
@@ -105,6 +107,7 @@ def _cluster_spec(
     worker_cpus: int,
     worker: PodSizing,
     ray_resources: dict[str, str] | None = None,
+    head_ports: list[dict[str, Any]] = HEAD_PORTS,
 ) -> dict[str, Any]:
     group: dict[str, Any] = {
         "groupName": group_name,
@@ -127,7 +130,7 @@ def _cluster_spec(
             "rayStartParams": {"num-cpus": "0", "dashboard-host": "0.0.0.0", "metrics-export-port": "8080"},  # noqa: S104
             "template": {
                 "metadata": {"labels": labels},
-                "spec": {"containers": [_container("ray-head", image, head, HEAD_PORTS)]},
+                "spec": {"containers": [_container("ray-head", image, head, head_ports)]},
             },
         },
         "workerGroupSpecs": [group],
@@ -230,6 +233,7 @@ def build_rayservice(*, serve_config: Mapping[str, Any], settings: PlatformSetti
                 workers=workers,
                 worker_cpus=2,
                 worker=serve_worker_sizing(settings.profile),
+                head_ports=SERVE_HEAD_PORTS,
             ),
         },
     }

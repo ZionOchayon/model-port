@@ -124,6 +124,9 @@ def test_rayservice_upgrade_strategy_new_cluster():
     assert spec["upgradeStrategy"] == {"type": "NewCluster"}
     head = spec["rayClusterConfig"]["headGroupSpec"]
     assert head["rayStartParams"]["num-cpus"] == "0"
+    # without a head port named `serve`, KubeRay never creates the Serve Service nor marks the RayService ready
+    ports = head["template"]["spec"]["containers"][0]["ports"]
+    assert {"containerPort": 8000, "name": "serve"} in ports
     workers = spec["rayClusterConfig"]["workerGroupSpecs"][0]
     assert (workers["groupName"], workers["replicas"], workers["rayStartParams"]["num-cpus"]) == (
         "serve",
