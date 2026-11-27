@@ -26,6 +26,8 @@ All notable changes to this project are documented here. The format follows
   client settings and structured logging.
 - `modelport validate DIR`: twelve ordered checks with a fix for each failure, no cluster needed; global
   `--json`, `--debug` and `--version`.
+- Ingest: quality checks against a dataset contract, immutable dataset versions (manifest written last)
+  and quarantine with a report.
 - Platform settings from the environment, the platform ports, and the S3 (MinIO) adapter; a test keeps the
   pure core free of I/O libraries.
 - `examples/datasets/prepare.py`: downloads Fashion-MNIST, EuroSAT or Covertype, converts them to the
