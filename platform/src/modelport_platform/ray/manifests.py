@@ -47,7 +47,7 @@ def _cpu(cores: float) -> str:
 def head_sizing(profile: Profile) -> PodSizing:
     """Ray head of any cluster (section 9.7)."""
     return (
-        PodSizing("200m", "1", "1536Mi", "3Gi")
+        PodSizing("200m", "1", "1Gi", "3Gi")
         if profile is Profile.SMOKE
         else PodSizing("250m", "1", "2Gi", "4Gi")
     )
@@ -63,7 +63,7 @@ def train_worker_sizing(spec: ModelSpec, profile: Profile) -> PodSizing:
 def serve_worker_sizing(profile: Profile) -> PodSizing:
     """A Serve worker pod."""
     return (
-        PodSizing("500m", "2", "2560Mi", "3584Mi")
+        PodSizing("500m", "2", "1536Mi", "3584Mi")
         if profile is Profile.SMOKE
         else PodSizing("1", "2", "3Gi", "4Gi")
     )
