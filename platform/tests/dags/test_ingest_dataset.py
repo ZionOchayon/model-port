@@ -104,3 +104,17 @@ def test_invalid_dataset_name_quarantined_under_unknown(store):
     store.write_bytes("s3://incoming/Bad_Name/a.parquet", parquet())
     result = dag_module.process_file(item("s3://incoming/Bad_Name/a.parquet"), store, Events())
     assert result["quarantined"].startswith("s3://quarantine/unknown-dataset/")
+
+
+def test_continuous_runs_get_distinct_logical_dates():
+    # without a start_date the first run's interval is empty and every later run reuses its logical date
+    from airflow.timetables.base import TimeRestriction
+    from airflow.timetables.simple import ContinuousTimetable
+
+    dag = dag_module.ingest_dataset()
+    restriction = TimeRestriction(earliest=dag.start_date, latest=None, catchup=False)
+    first = ContinuousTimetable().next_dagrun_info(last_automated_data_interval=None, restriction=restriction)
+    second = ContinuousTimetable().next_dagrun_info(
+        last_automated_data_interval=first.data_interval, restriction=restriction
+    )
+    assert second.logical_date > first.logical_date

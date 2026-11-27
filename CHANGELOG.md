@@ -32,6 +32,8 @@ All notable changes to this project are documented here. The format follows
   (retrain subscribed models on a new dataset version); `make ui`; CI DAG tests.
 - Ingest: quality checks against a dataset contract, immutable dataset versions (manifest written last)
   and quarantine with a report.
+- CI end-to-end job on the smoke profile (`scripts/e2e.sh v0.1`): ingest with a corrupt file, train,
+  gate, a deliberately broken model that must be rejected, and a retrain on a new dataset version.
 - `scripts/verify.py`: checks a running stack from its artifacts (MLflow, S3, Airflow, KubeRay), and
   `scripts/ops.py` operations for CI and demos (wait for runs and aliases, trigger DAGs, snapshot predictions).
 - `modelport status NAME`: aliases, the newest version's state and gate report next to the champion's,

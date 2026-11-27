@@ -38,16 +38,7 @@ jobs:
           bash -euo pipefail -c "$COMMANDS"
       - name: Collect logs
         if: failure()
-        run: |
-          mkdir -p artifacts
-          k="kubectl --context kind-modelport"
-          $k get all -A -o wide > artifacts/get-all.txt 2>&1 || true
-          $k get rayjobs,rayclusters,rayservices -A -o yaml > artifacts/ray-crs.yaml 2>&1 || true
-          $k describe pods -A > artifacts/describe-pods.txt 2>&1 || true
-          $k get events -A --sort-by=.lastTimestamp > artifacts/events.txt 2>&1 || true
-          sched=$($k get pod -n platform -l component=scheduler -o name | head -1)
-          $k exec -n platform "${sched#pod/}" -- tar czf - -C /opt/airflow logs > artifacts/airflow-logs.tgz 2>/dev/null || true  # names contain ":"
-          cp /tmp/modelport-ui-*.log artifacts/ 2>/dev/null || true
+        run: bash scripts/collect-logs.sh
       - uses: actions/upload-artifact@v7.0.2
         if: failure()
         with:

@@ -6,6 +6,7 @@ alias `modelport-datasets`, which schedules `retrain_on_dataset`.
 
 import hashlib
 import io
+from datetime import UTC, datetime
 from typing import Any, Final
 
 from airflow.providers.amazon.aws.sensors.s3 import S3KeySensor
@@ -89,6 +90,8 @@ def _valid(dataset: str) -> bool:
 @dag(
     dag_id="ingest_dataset",
     schedule="@continuous",
+    # without it the first run has an empty interval and every later run reuses its logical date
+    start_date=datetime(2026, 1, 1, tzinfo=UTC),
     max_active_runs=1,
     catchup=False,
     default_args=dagkit.DEFAULT_ARGS,
