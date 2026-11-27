@@ -102,6 +102,16 @@ class InMemoryRegistry:
     def model_uri(self, name: str, version: str) -> str:
         return f"models:/{name}/{version}"
 
+    def ensure_run(
+        self, experiment: str, run_name: str, key_tag: Tag, tags: Mapping[str, str], params: Mapping[str, Any]
+    ) -> str:
+        for run_id, run in self.runs.items():
+            if run.get("experiment") == experiment and run["tags"].get(key_tag) == tags[key_tag]:
+                return run_id
+        run_id = f"run-{len(self.runs) + 1}"
+        self.runs[run_id] = {"experiment": experiment, "tags": dict(tags), "artifacts": {}}
+        return run_id
+
     # ArtifactStore
     def find_submission(self, model: str, key: str) -> str | None:
         found = [r for r, run in self.runs.items() if run["tags"] == {"model": model, "key": key}]

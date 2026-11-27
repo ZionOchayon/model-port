@@ -59,6 +59,8 @@ class Tag(StrEnum):
     # submission run tags
     MODEL = "modelport.model"
     SUBMISSION_KEY = "modelport.submission_key"
+    # evaluation run tags
+    EVAL_KEY = "modelport.eval_key"  # <model>/<version>/<val_uri>/<dag_run_id>
 
 
 class Bucket(StrEnum):

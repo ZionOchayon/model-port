@@ -9,6 +9,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from airflow.providers.standard.operators.trigger_dagrun import TriggerDagRunOperator
 from airflow.sdk import Param, PokeReturnValue, dag, task
 from airflow.sdk.exceptions import AirflowFailException
 
@@ -19,6 +20,7 @@ from modelport.spec import ModelSpec, load_spec
 from modelport_platform import dagkit
 from modelport_platform.dagkit import Pool
 from modelport_platform.kube import Plural
+from modelport_platform.metrics.push import push_job_timing
 from modelport_platform.ports import DatasetStore
 from modelport_platform.ray.manifests import build_train_rayjob
 from modelport_platform.train.data import resolve_dataset_version
@@ -75,7 +77,7 @@ def record_version(registry: ModelRegistry, model: str, rayjob: str) -> str:
     },
 )
 def train_model() -> None:
-    """Prepare -> create_rayjob -> wait_rayjob -> record_version."""
+    """Prepare -> create_rayjob -> wait_rayjob -> record_version -> trigger_evaluation."""
 
     @task(task_id="prepare")
     def prepare_task(params: Any = None, run_id: Any = None) -> dict[str, Any]:  # noqa: ANN401
@@ -104,11 +106,28 @@ def train_model() -> None:
         return dagkit.rayjob_poke(dagkit.kube(), rayjob)
 
     @task(task_id="record_version")
-    def record_version_task(rayjob: str, params: Any = None) -> str:  # noqa: ANN401
-        return record_version(dagkit.registry(), params["model"], rayjob)
+    def record_version_task(rayjob: str, timing: dict[str, Any], params: Any = None) -> str:  # noqa: ANN401
+        version = record_version(dagkit.registry(), params["model"], rayjob)
+        push_job_timing(
+            dagkit.settings().pushgateway_url,
+            model=params["model"],
+            pattern="rayjob",
+            kind="train",
+            startup_s=timing.get("startup_s"),
+            duration_s=timing.get("duration_s"),
+            cpu_s=None,
+        )
+        return version
 
     rayjob = create_rayjob(prepare_task())
-    wait_rayjob(rayjob) >> record_version_task(rayjob)
+    version = record_version_task(rayjob, wait_rayjob(rayjob))
+    version >> TriggerDagRunOperator(
+        task_id="trigger_evaluation",
+        trigger_dag_id="evaluate_and_promote",
+        trigger_run_id="evaluate__{{ params.model }}__v{{ ti.xcom_pull(task_ids='record_version') }}",
+        conf={"model": "{{ params.model }}", "version": "{{ ti.xcom_pull(task_ids='record_version') }}"},
+        skip_when_already_exists=True,
+    )
 
 
 DAG = train_model()

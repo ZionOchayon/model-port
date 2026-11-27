@@ -4,15 +4,20 @@ DAG files stay thin: each task calls one function here or in a platform module w
 tests call the same functions with fakes. Nothing here imports Airflow at module level.
 """
 
+import tempfile
 from datetime import datetime, timedelta
 from enum import StrEnum
 from functools import cache
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
 
 from modelport.logs import get_logger
-from modelport.registry import MlflowRegistry
+from modelport.naming import Tag
+from modelport.registry import ArtifactStore, MlflowRegistry, VersionInfo
+from modelport.spec import ModelSpec, load_spec
 from modelport_platform.kube import KubeClient, Plural, RayJobPhase, rayjob_status
 from modelport_platform.ports import KubeApi
+from modelport_platform.ray.jobs import SharedClusterJobs
 from modelport_platform.s3 import S3DatasetStore, boto3_client
 from modelport_platform.settings import PlatformSettings
 
@@ -53,6 +58,17 @@ def registry() -> MlflowRegistry:
 def store() -> S3DatasetStore:
     """The S3 dataset store adapter."""
     return S3DatasetStore(boto3_client(settings()))
+
+
+def jobs() -> SharedClusterJobs:
+    """Ray Jobs on the shared RayCluster."""
+    return SharedClusterJobs(settings().shared_ray_address)
+
+
+def spec_for_version(store: ArtifactStore, info: VersionInfo) -> ModelSpec:
+    """The spec a version was trained with (`spec/model.yaml` in its training run)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        return load_spec(store.download(info.tags[Tag.TRAIN_RUN_ID], "spec/model.yaml", Path(tmp)))
 
 
 def kube() -> KubeClient:

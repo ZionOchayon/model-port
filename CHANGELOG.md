@@ -32,6 +32,9 @@ All notable changes to this project are documented here. The format follows
   (retrain subscribed models on a new dataset version); `make ui`; CI DAG tests.
 - Ingest: quality checks against a dataset contract, immutable dataset versions (manifest written last)
   and quarantine with a report.
+- Airflow DAG `evaluate_and_promote`: the new version and the champion are evaluated on the same
+  validation set, the gate decides, and the version becomes `candidate` or `rejected` with reasons;
+  `train_model` starts it after registration. Lifecycle and job-timing pushes to a Pushgateway.
 - Shared RayCluster `modelport-shared` (workers scale from zero) for short jobs, idempotent job
   submission to it, and the evaluation job that scores a version and times its inference.
 - `modelport submit DIR [--spec FILE] [--dataset-version N] [--wait]`: validate, package and start training

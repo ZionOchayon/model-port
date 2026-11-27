@@ -139,7 +139,10 @@ def test_params_reject_bad_model_name():
 
 def test_task_ids_and_pools():
     tasks = {t.task_id: t for t in dag_module.DAG.tasks}
-    assert set(tasks) == {"prepare", "create_rayjob", "wait_rayjob", "record_version"}
+    assert set(tasks) == {"prepare", "create_rayjob", "wait_rayjob", "record_version", "trigger_evaluation"}
+    trigger = tasks["trigger_evaluation"]
+    assert trigger.trigger_dag_id == "evaluate_and_promote"
+    assert "evaluate__{{ params.model }}__v" in trigger.trigger_run_id  # naming.evaluate_run_id format
     assert tasks["create_rayjob"].pool == tasks["wait_rayjob"].pool == "ray_training"
     assert tasks["wait_rayjob"].mode == "reschedule"
     assert dag_module.DAG.max_active_runs == 2
