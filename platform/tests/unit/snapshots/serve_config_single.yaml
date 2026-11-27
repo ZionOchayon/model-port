@@ -1,0 +1,44 @@
+http_options:
+  host: 0.0.0.0
+  port: 8000
+applications:
+- name: covertype-classifier
+  route_prefix: /covertype-classifier
+  import_path: modelport_platform.serve.router:build_router_app
+  args:
+    model: covertype-classifier
+  deployments:
+  - name: ModelRouter
+    num_replicas: 1
+    ray_actor_options:
+      num_cpus: 0.1
+    user_config:
+      champion_app: covertype-classifier--champion
+      candidate_app: null
+      candidate_weight: 0.0
+      latency_threshold_ms: 500.0
+- name: covertype-classifier--champion
+  route_prefix: null
+  import_path: modelport_platform.serve.app:build_model_app
+  runtime_env:
+    pip:
+      packages:
+      - xgboost==3.4.1
+      pip_check: false
+    env_vars:
+      MLFLOW_TRACKING_URI: http://mlflow.platform.svc.cluster.local:5000
+  args:
+    model: covertype-classifier
+    version: '2'
+    variant: champion
+  deployments:
+  - name: ModelDeployment
+    num_replicas: 1
+    ray_actor_options:
+      num_cpus: 0.5
+      memory: 1073741824
+    user_config:
+      fault_error_rate: 0.0
+      inference_log_sample_rate: 1.0
+      live_confidence_drop: 0.15
+      live_class_share_increase: 0.3

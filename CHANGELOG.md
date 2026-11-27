@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Serve routing and configuration: a router per model at `/<model>/predict` that splits traffic between
+  champion and candidate by weight with no fallback, and the RayService `serveConfigV2` rendered from the
+  desired state of every model, each version with its own runtime environment.
 - Serving building blocks: the HTTP contract shared by Serve and the CLI (`PredictRequest`, `PredictResponse`,
   input files as JSON, CSV, Parquet or one image), and a Ray Serve application per model version that
   refuses to start when the version fails its signature self-test, answers bad input with 422, exports
