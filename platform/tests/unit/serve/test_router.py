@@ -172,3 +172,26 @@ def test_first_version_without_champion_goes_to_candidate(monkeypatch):
         status, body = call(deployment, request())
         assert (status, body["variant"]) == (200, "candidate")
     assert call(deployment, request("/m/healthz", method="GET"))[0] == 200
+
+
+def test_candidate_app_not_built_yet_goes_to_champion(monkeypatch):
+    from ray.serve.exceptions import RayServeException
+
+    champion = Handle("champion")
+    handles = {"m--champion": champion}
+    deployment, fetched = make(monkeypatch, handles, candidate_weight=1.0)
+
+    def missing_candidate(name):
+        fetched.append(name)
+        if name not in handles:
+            raise RayServeException(f"Application '{name}' does not exist.")
+        return handles[name]
+
+    monkeypatch.setattr(router, "_get_app_handle", missing_candidate)
+    status, body = call(deployment, request())
+    assert (status, body["variant"]) == (200, "champion")
+    outcomes = [args for name, args, _ in Recorder.instances[0].calls if name == "request"]
+    assert outcomes == [("champion", "ok")]
+    handles["m--candidate"] = Handle("candidate")  # Serve built the app: the next request reaches it
+    status, body = call(deployment, request())
+    assert (status, body["variant"]) == (200, "candidate")

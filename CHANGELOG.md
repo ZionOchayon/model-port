@@ -44,6 +44,8 @@ All notable changes to this project are documented here. The format follows
 
 - Smoke profile: a model's retraining no longer waits forever for memory while a model is served. The
   memory requests of Ray heads (1 GiB) and the Serve worker (1.5 GiB) are lower; their limits are unchanged.
+- No request fails when a canary starts: until Serve has built the candidate app, the router sends its
+  share to the champion. Errors from a running candidate still return 500 so the canary can reject it.
 
 ## [0.1.0] - 2026-11-27
 

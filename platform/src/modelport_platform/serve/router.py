@@ -1,7 +1,8 @@
 """One HTTP entry point per model (`/<model>/predict`) that splits traffic between champion and candidate.
 
 The split is a weighted coin per request. There is no fallback from a failing candidate to the champion:
-the canary must see the candidate's errors to reject it.
+the canary must see the candidate's errors to reject it. Only a candidate app that Serve has not built yet
+(no handle) sends the request to the champion.
 """
 
 import json
@@ -10,6 +11,7 @@ import time
 from typing import Any, Literal
 
 from ray import serve
+from ray.serve.exceptions import RayServeException
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -102,6 +104,22 @@ class ModelRouter:
             self._handles[app_name] = _get_app_handle(app_name)
         return self._handles[app_name]
 
+    def _route(self, variant: Variant) -> tuple[Variant, Any]:
+        """The variant that serves the request and its handle.
+
+        The candidate app arrives in the same config change as its weight, and the router is reconfigured
+        seconds before Serve has built that app: until it exists, the champion serves.
+        """
+        app_name = self.candidate_app if variant == "candidate" else self.champion_app
+        assert app_name is not None  # weight 0 without a candidate app, 1 without a champion app
+        try:
+            return variant, self._handle(app_name)
+        except RayServeException:
+            if variant == "champion" or self.champion_app is None:
+                raise
+            _log.info("router.candidate_not_ready", model=self.model, candidate_app=app_name)
+            return "champion", self._handle(self.champion_app)
+
     async def __call__(self, request: Request) -> JSONResponse:
         """Dispatch by path: `/predict`, `/healthz`, anything else 404."""
         path = request.url.path.removeprefix(f"/{self.model}").rstrip("/") or "/"
@@ -114,8 +132,6 @@ class ModelRouter:
                 status_code=404,
             )
         variant = choose_variant(self.candidate_weight, random.random())  # noqa: S311 - traffic split
-        app_name = self.candidate_app if variant == "candidate" else self.champion_app
-        assert app_name is not None  # weight 0 without a candidate app, 1 without a champion app
         start = time.perf_counter()
         try:
             body = json.loads(await request.body())
@@ -123,7 +139,8 @@ class ModelRouter:
             self.metrics.request(variant, "client_error")
             return JSONResponse({"error": f"request body is not JSON: {err.msg}"}, status_code=422)
         try:
-            result: dict[str, Any] = await self._handle(app_name).predict.remote(body)
+            variant, handle = self._route(variant)
+            result: dict[str, Any] = await handle.predict.remote(body)
         except Exception as err:  # no fallback: the canary must see the candidate's errors
             self.metrics.request(variant, "error")
             _log.warning("router.variant_failed", model=self.model, variant=variant, error=type(err).__name__)
