@@ -32,6 +32,8 @@ All notable changes to this project are documented here. The format follows
   (retrain subscribed models on a new dataset version); `make ui`; CI DAG tests.
 - Ingest: quality checks against a dataset contract, immutable dataset versions (manifest written last)
   and quarantine with a report.
+- Airflow DAG `train_model`: one RayJob per submission on its own Ray cluster, waited on with a
+  rescheduling sensor, then a check that the version was registered.
 - Model registration after training: an MLflow version with signature, lineage tags and a drift
   baseline; Population Stability Index for continuous and categorical features.
 - Training on Ray Train: the RayJob entrypoint, Torch (DDP over gloo) and XGBoost strategies,
