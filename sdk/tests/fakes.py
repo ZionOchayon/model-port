@@ -79,6 +79,11 @@ class InMemoryRegistry:
     def set_model_tags(self, name: str, tags: Mapping[Tag, str]) -> None:
         self.models[name].update(tags)
 
+    def model_tags(self, name: str) -> Mapping[str, str]:
+        if name not in self.models:
+            raise NotFoundError(what=f"No model named '{name}' is registered", fix="Check the name.")
+        return dict(self.models[name])
+
     def apply_plan(self, name: str, plan: Plan) -> None:
         for op in plan.alias_ops:
             if op.kind is AliasOpKind.SET and op.version is not None:

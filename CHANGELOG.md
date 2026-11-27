@@ -26,6 +26,8 @@ All notable changes to this project are documented here. The format follows
   client settings and structured logging.
 - `modelport validate DIR`: twelve ordered checks with a fix for each failure, no cluster needed; global
   `--json`, `--debug` and `--version`.
+- Airflow DAGs `ingest_dataset` (deferrable S3 sensor, version or quarantine) and `retrain_on_dataset`
+  (retrain subscribed models on a new dataset version); `make ui`; CI DAG tests.
 - Ingest: quality checks against a dataset contract, immutable dataset versions (manifest written last)
   and quarantine with a report.
 - Platform settings from the environment, the platform ports, and the S3 (MinIO) adapter; a test keeps the

@@ -27,7 +27,7 @@ def version(registry, name):
 def test_ensure_registered_model_idempotent(registry):
     registry.ensure_registered_model("image-classifier", {Tag.DATASET: "fashion-mnist"})
     registry.ensure_registered_model("image-classifier", {Tag.DATASET: "eurosat", Tag.AUTO_RETRAIN: "true"})
-    tags = registry.client.get_registered_model("image-classifier").tags
+    tags = registry.model_tags("image-classifier")
     assert tags[Tag.DATASET] == "eurosat"
     assert tags[Tag.AUTO_RETRAIN] == "true"
 

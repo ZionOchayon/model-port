@@ -41,6 +41,7 @@ config:
     parallelism: 8
     max_active_tasks_per_dag: 8
     load_examples: "False"
+    dags_are_paused_at_creation: "False" # DAGs ship in the image and must run without a manual unpause
     auth_manager: airflow.api_fastapi.auth.managers.simple.simple_auth_manager.SimpleAuthManager
     simple_auth_manager_users: "modelport:admin"
     simple_auth_manager_passwords_file: /opt/airflow/auth/passwords.json

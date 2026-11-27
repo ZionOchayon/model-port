@@ -24,7 +24,7 @@ images: ## Build and load the three modelport images
 	@bash scripts/images.sh
 
 ui: ## Port-forward the UIs and print their URLs
-	@echo "make ui: not implemented yet"; exit 1
+	@bash scripts/ui.sh
 
 demo: ## Onboard both example models end to end, then inject drift
 	@echo "make demo: not implemented yet"; exit 1

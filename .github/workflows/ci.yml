@@ -111,7 +111,6 @@ jobs:
   dags:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    if: false # enabled once the DAG tests and the Airflow image lock exist
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: astral-sh/setup-uv@v10.3.3
@@ -122,7 +121,8 @@ jobs:
           uv venv --python 3.12 "$RUNNER_TEMP/af"
           . "$RUNNER_TEMP/af/bin/activate"
           uv pip install --require-hashes -r deploy/images/airflow/requirements.lock
-          uv pip install --no-deps ./sdk ./platform pytest==9.2.0
+          uv pip install pytest==9.2.0
+          uv pip install --no-deps ./sdk ./platform
           AIRFLOW_HOME="$RUNNER_TEMP/airflow" pytest platform/tests/dags -m "not kind"
 
   e2e:

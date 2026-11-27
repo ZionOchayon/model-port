@@ -82,6 +82,9 @@ class ModelRegistry(Protocol):
     def set_model_tags(self, name: str, tags: Mapping[Tag, str]) -> None:
         """Set tags on the registered model."""
 
+    def model_tags(self, name: str) -> Mapping[str, str]:
+        """Tags of the registered model; NotFoundError if it does not exist."""
+
     def apply_plan(self, name: str, plan: Plan) -> None:
         """Execute a lifecycle plan (alias operations in order, then states)."""
 
@@ -259,6 +262,23 @@ class MlflowRegistry:
         """Set tags on the registered model."""
         for key, value in tags.items():
             self._call(partial(self.client.set_registered_model_tag, name, key, value))
+
+    def model_tags(self, name: str) -> Mapping[str, str]:
+        """Tags of the registered model.
+
+        Raises:
+            NotFoundError: no registered model has this name.
+        """
+        try:
+            model = self._call(lambda: self.client.get_registered_model(name))
+        except MlflowException as err:
+            if _code(err) == "RESOURCE_DOES_NOT_EXIST":
+                raise NotFoundError(
+                    what=f"No model named '{name}' is registered",
+                    fix="Check the name with `modelport status`.",
+                ) from err
+            raise
+        return dict(model.tags or {})
 
     def apply_plan(self, name: str, plan: Plan) -> None:
         """Run the alias operations in order, then write the new states. Re-applying converges."""
