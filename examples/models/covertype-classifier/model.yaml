@@ -1,0 +1,45 @@
+# Forest cover type from cartographic variables (UCI Covertype). One boosting round is one "epoch".
+schema_version: 1
+name: covertype-classifier
+class: model:CovertypeClassifier
+framework: xgboost
+labels:
+  [Spruce/Fir, Lodgepole Pine, Ponderosa Pine, Cottonwood/Willow, Aspen, Douglas-fir, Krummholz]
+signature:
+  inputs:
+    - { name: elevation, type: double }
+    - { name: aspect, type: double }
+    - { name: slope, type: double }
+    - { name: horizontal_distance_to_hydrology, type: double }
+    - { name: vertical_distance_to_hydrology, type: double }
+    - { name: horizontal_distance_to_roadways, type: double }
+    - { name: hillshade_9am, type: double }
+    - { name: hillshade_noon, type: double }
+    - { name: hillshade_3pm, type: double }
+    - { name: horizontal_distance_to_fire_points, type: double }
+    - { name: wilderness_area, type: long }
+    - { name: soil_type, type: long }
+runtime:
+  pip: [xgboost==3.4.1]
+resources:
+  train: { workers: 2, cpus_per_worker: 1, memory_per_worker: 2Gi }
+  serve: { replicas: 1, cpus: 0.5, memory: 1Gi }
+train:
+  epochs: 30
+  learning_rate: 0.3
+  params: { max_depth: 8 }
+evaluation:
+  metric: f1_macro
+  min_improvement: 0.0
+  max_drop_per_class: 0.05
+  min_absolute: 0.5
+serving:
+  canary_weight: 0.1
+  observation_window_minutes: 10
+  latency_p95_ms: 500
+drift:
+  psi_warning: 0.1
+  psi_critical: 0.25
+data:
+  dataset: s3://datasets/covertype
+  label_column: cover_type

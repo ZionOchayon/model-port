@@ -1,6 +1,6 @@
-"""Spike (risk R4): the Ray Train V2 XGBoostTrainer with xgboost 3.4.1, a checkpoint per round, and resume.
+"""Ray Train V2 XGBoostTrainer on local Ray, driving the example Covertype model's own train_loop.
 
-The train loop is inline on purpose; the example Covertype model replaces it once it exists.
+Settles risk R4 (xgboost 3.4 with Ray 2.60): 2 workers, a checkpoint every boosting round, and resume.
 """
 
 import sys
@@ -14,29 +14,48 @@ pytestmark = pytest.mark.integration
 
 ray = pytest.importorskip("ray")
 xgboost = pytest.importorskip("xgboost")
-# Ray workers cannot import this test module, so ship the inline train loop by value.
+# Ray workers cannot import this test module, so ship the worker function by value.
 ray.cloudpickle.register_pickle_by_value(sys.modules[__name__])
 
-ROWS, CLASSES, FEATURES = 2000, 7, 6
+ROOT = Path(__file__).resolve().parents[3]
+MODEL_DIR = ROOT / "examples" / "models" / "covertype-classifier"
+ROWS = 2000
 
 
-def train_loop(config):
-    import ray.train
-    import xgboost
-    from ray.train.xgboost import RayTrainReportCallback
+def covertype_like_table(rows: int) -> pd.DataFrame:
+    """Rows with the example's signature columns and one of its seven labels."""
+    from modelport.spec import load_spec
 
-    frame = ray.train.get_dataset_shard("train").materialize().to_pandas()
-    dtrain = xgboost.DMatrix(frame.drop(columns="y"), label=frame["y"])
-    previous, done = None, 0
-    if (ckpt := ray.train.get_checkpoint()) is not None:
-        previous = RayTrainReportCallback.get_model(ckpt)
-        done = previous.num_boosted_rounds()
-    xgboost.train(
-        {"objective": "multi:softprob", "num_class": CLASSES, "tree_method": "hist", "max_depth": 3},
-        dtrain,
-        num_boost_round=config["rounds"] - done,
-        xgb_model=previous,
-        callbacks=[RayTrainReportCallback(frequency=1)],
+    spec = load_spec(MODEL_DIR / "model.yaml")
+    rng = np.random.default_rng(0)
+    frame = pd.DataFrame(
+        {
+            c.name: rng.normal(size=rows) if c.type == "double" else rng.integers(0, 4, rows)
+            for c in spec.signature.inputs
+        }
+    )
+    frame[spec.data.label_column] = [spec.labels[i % len(spec.labels)] for i in range(rows)]
+    return frame
+
+
+def worker(config):
+    """What the platform's worker entry does: load the class from the model folder and call train_loop."""
+    from modelport import TrainConfig
+    from modelport.loader import instantiate
+    from modelport.spec import load_spec
+
+    spec = load_spec(Path(config["model_dir"]) / "model.yaml")
+    instantiate(Path(config["model_dir"]), spec).train_loop(
+        TrainConfig(
+            model_name=spec.name,
+            labels=tuple(spec.labels),
+            label_column=spec.data.label_column,
+            epochs=config["rounds"],
+            batch_size=spec.train.batch_size,
+            learning_rate=spec.train.learning_rate,
+            params=dict(spec.train.params),
+            num_workers=2,
+        )
     )
 
 
@@ -44,35 +63,35 @@ def fit(storage, rounds):
     from ray.train import CheckpointConfig, RunConfig, ScalingConfig
     from ray.train.xgboost import XGBoostTrainer
 
-    rng = np.random.default_rng(0)
-    frame = pd.DataFrame(rng.normal(size=(ROWS, FEATURES)), columns=[f"f{i}" for i in range(FEATURES)])
-    frame["y"] = rng.integers(0, CLASSES, ROWS)
     trainer = XGBoostTrainer(
-        train_loop,
-        train_loop_config={"rounds": rounds},
+        worker,
+        train_loop_config={"model_dir": str(MODEL_DIR), "rounds": rounds},
         scaling_config=ScalingConfig(num_workers=2, use_gpu=False, resources_per_worker={"CPU": 1}),
         run_config=RunConfig(
-            name="spike-xgb", storage_path=str(storage), checkpoint_config=CheckpointConfig(num_to_keep=2)
+            name="xgb", storage_path=str(storage), checkpoint_config=CheckpointConfig(num_to_keep=2)
         ),
-        datasets={"train": ray.data.from_pandas(frame)},
+        datasets={"train": ray.data.from_pandas(covertype_like_table(ROWS))},
     )
     return trainer.fit()
 
 
-def test_xgboost_trainer_checkpoints_per_round_and_resumes(local_ray, tmp_path):
-    from ray.train.xgboost import RayTrainReportCallback
+def test_example_covertype_model_checkpoints_per_round_and_resumes(local_ray, tmp_path):
+    from modelport.loader import instantiate
+    from modelport.spec import load_spec
 
     first = fit(tmp_path, rounds=5)
     assert first.error is None
+    spec = load_spec(MODEL_DIR / "model.yaml")
+    model = instantiate(MODEL_DIR, spec)
     with first.checkpoint.as_directory() as d:
         assert (Path(d) / "model.ubj").is_file()
-    booster = RayTrainReportCallback.get_model(first.checkpoint)
-    assert booster.num_boosted_rounds() == 5
-    probs = booster.predict(
-        xgboost.DMatrix(pd.DataFrame(np.zeros((3, FEATURES)), columns=[f"f{i}" for i in range(FEATURES)]))
-    )
-    assert probs.shape == (3, CLASSES)
+        model.load(Path(d))
+    assert model.booster.num_boosted_rounds() == 5
+    example = pd.read_parquet(MODEL_DIR / "example" / "input.parquet")
+    assert model.booster.predict(model.preprocess(example)).shape == (len(example), 7)
 
     resumed = fit(tmp_path, rounds=7)
     assert resumed.error is None
-    assert RayTrainReportCallback.get_model(resumed.checkpoint).num_boosted_rounds() == 7
+    with resumed.checkpoint.as_directory() as d:
+        model.load(Path(d))
+    assert model.booster.num_boosted_rounds() == 7
