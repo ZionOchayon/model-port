@@ -81,3 +81,60 @@ def test_variants_counted():
     clock = Clock()
     result = load(Client(clock, ["champion", "candidate", "candidate", "champion"]), clock, duration_s=0.8)
     assert result.variants == {"champion": 2, "candidate": 2}
+
+
+def champion_services(serve):
+    import importlib.util
+    from pathlib import Path
+
+    from modelport.cli.main import Services
+    from modelport.naming import Alias, Tag
+
+    root = Path(__file__).resolve().parents[4]
+    spec = importlib.util.spec_from_file_location("sdk_fakes", root / "sdk/tests/fakes.py")
+    fakes = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(fakes)
+    reg = fakes.InMemoryRegistry()
+    model_yaml = (root / "examples/models/covertype-classifier/model.yaml").read_bytes()
+    reg.runs["train-1"] = {"tags": {}, "artifacts": {"spec/model.yaml": model_yaml}}
+    reg.add_version("covertype-classifier", {Tag.TRAIN_RUN_ID: "train-1"}, "train-1")
+    reg.aliases["covertype-classifier"][Alias.CHAMPION] = "1"
+    rows = root / "examples/models/covertype-classifier/example/input.parquet"
+    return Services(registry=reg, store=reg, orchestrator=None, settings=None, serve=serve), rows
+
+
+class Steady:
+    def __init__(self, fail_first=0):
+        self.calls, self.fail_first = 0, fail_first
+
+    def predict(self, model, request):
+        self.calls += 1
+        if self.calls <= self.fail_first:
+            raise PlatformUnavailableError(what="Cannot reach Serve", fix="Run `make ui`.")
+        items = [PredictionItem(prediction="Aspen", confidence=0.9)] * len(request.instances)
+        return PredictResponse(model=model, version="1", variant="champion", predictions=items)
+
+
+def test_main_writes_result_and_exit_code(tmp_path):
+    import json
+
+    from modelport_platform.tools.loadgen import main
+
+    services, rows = champion_services(Steady())
+    out = tmp_path / "result.json"
+    argv = ["--model", "covertype-classifier", "--rows", str(rows), "--rps", "20", "--duration", "0.25"]
+    assert main([*argv, "--out", str(out)], services=services) == 0
+    result = json.loads(out.read_text(encoding="utf-8"))
+    assert result["failed"] == 0
+    assert result["sent"] >= 1  # pacing is tested with a fake clock above
+    services, rows = champion_services(Steady(fail_first=1))
+    assert main(argv, services=services) == 1  # any failed request fails the run (FR-11)
+
+
+def test_main_without_champion_exits_with_the_error_code(capsys):
+    from modelport_platform.tools.loadgen import main
+
+    services, rows = champion_services(Steady())
+    services.registry.aliases["covertype-classifier"].pop("champion")
+    assert main(["--model", "covertype-classifier", "--rows", str(rows)], services=services) == 7
+    assert "no champion" in capsys.readouterr().err

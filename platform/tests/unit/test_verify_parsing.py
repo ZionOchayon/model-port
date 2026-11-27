@@ -111,3 +111,22 @@ applications:
         "fashion-classifier--champion": (),
         "covertype-classifier--champion": ("xgboost==3.4.1",),
     }
+
+
+def test_zero_downtime_problems():
+    good = {
+        "sent": 1500,
+        "failed": 0,
+        "champion_before": "4",
+        "champion_after": "5",
+        "promoted_during_load": True,
+    }
+    assert verify.zero_downtime_problems(good) == []
+    bad = {**good, "sent": 120, "failed": 2, "status_counts": {"200": 118, "conn": 2}, "champion_after": "4"}
+    assert verify.zero_downtime_problems(bad) == [
+        "2 of 120 requests failed ({'200': 118, 'conn': 2})",
+        "only 120 requests sent (at least 300)",
+        "the champion stayed v4",
+    ]
+    late = {**good, "promoted_during_load": False}
+    assert verify.zero_downtime_problems(late) == ["the promotion finished after the load ended"]

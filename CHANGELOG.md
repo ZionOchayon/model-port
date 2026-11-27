@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Zero-downtime drill `bench/drills/zero_downtime.sh` and check V-11: a new version is canaried and promoted
+  while constant load runs, and no request may fail. The load generator runs from a workstation with
+  `python -m modelport_platform.tools.loadgen --model NAME --rows FILE` and exits 1 on any failed request.
 - `modelport predict NAME FILE [--rows N]`: sends rows from a JSON, CSV, Parquet or image file to the
   model's champion and prints each prediction with the version and variant that answered. Two models are
   served side by side, each in its own runtime environment (check V-09).

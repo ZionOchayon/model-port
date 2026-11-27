@@ -2,19 +2,30 @@
 
 Requests are paced on a fixed schedule; a slow response delays the next request but never causes a
 burst to make up missed slots. Every outcome is counted by HTTP status (`conn` for connection errors).
+
+    python -m modelport_platform.tools.loadgen --model NAME --rows FILE --rps 5 --duration 120
+        [--out results.json] [--serve-url URL]
+
+runs from a workstation through `make ui`, encodes the rows with the champion's signature, prints the
+totals as JSON, and exits 1 when any request failed (FR-11).
 """
 
+import argparse
+import json
 import statistics
+import sys
 import time
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from pathlib import Path
 
 import pandas as pd
 
+from modelport.cli.main import Services, build_services, champion_spec
 from modelport.clients.serve import ServeClient
 from modelport.errors import ModelportError, PlatformUnavailableError
-from modelport.serving import encode_rows
+from modelport.serving import encode_rows, read_input_file
 from modelport.spec import ColumnSpec
 
 
@@ -90,3 +101,36 @@ def run_load(
         latency_ms_p95=_percentile(latencies, 95),
         variants=dict(variants),
     )
+
+
+def main(argv: Sequence[str] | None = None, services: Services | None = None) -> int:
+    """Run the load from the command line; the exit code is 1 when any request failed."""
+    parser = argparse.ArgumentParser(prog="python -m modelport_platform.tools.loadgen", description=__doc__)
+    parser.add_argument("--model", required=True)
+    parser.add_argument("--rows", type=Path, required=True, help="JSON, CSV or Parquet rows, or one image")
+    parser.add_argument("--rps", type=float, default=5.0)
+    parser.add_argument("--duration", type=float, default=120.0, help="seconds")
+    parser.add_argument("--out", type=Path, help="also write the totals here")
+    parser.add_argument("--serve-url", help="default: MODELPORT_SERVE_URL")
+    args = parser.parse_args(argv)
+    try:
+        services = services or build_services()
+        spec_inputs = champion_spec(services, args.model).signature.inputs
+        rows = read_input_file(args.rows, spec_inputs)
+    except ModelportError as err:
+        print(f"Error: {err.what}\n  How to fix: {err.fix}", file=sys.stderr)
+        return err.exit_code
+    client = ServeClient(args.serve_url) if args.serve_url else services.serve
+    result = run_load(
+        client, args.model, rows, spec_inputs=spec_inputs, rps=args.rps, duration_s=args.duration
+    )
+    text = json.dumps(asdict(result), indent=2)
+    if args.out:
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(text + "\n", encoding="utf-8")
+    print(text)
+    return 1 if result.failed else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

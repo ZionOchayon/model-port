@@ -46,7 +46,7 @@ from modelport.naming import (
 from modelport.packaging import build_code_zip
 from modelport.registry import ArtifactStore, MlflowRegistry, ModelRegistry
 from modelport.serving import MAX_INSTANCES, encode_rows, read_input_file
-from modelport.spec import load_spec, spec_sha256
+from modelport.spec import ModelSpec, load_spec, spec_sha256
 from modelport.validate import validate_model_dir
 
 app = typer.Typer(
@@ -532,12 +532,11 @@ def rollback(
     _serve_command(ctx, name, "rollback", None, wait, timeout, yes)
 
 
-def predict_rows(services: Services, name: str, path: Path, rows: int | None) -> dict[str, Any]:
-    """Send a file's rows to the model's endpoint.
+def champion_spec(services: Services, name: str) -> ModelSpec:
+    """The `model.yaml` the champion was trained with (its signature encodes requests).
 
     Raises:
         NotFoundError: the model has no champion (nothing is served).
-        SignatureMismatchError: the file does not fit the champion's signature.
     """
     champion = services.registry.resolve(name, Alias.CHAMPION)
     if champion is None:
@@ -546,9 +545,19 @@ def predict_rows(services: Services, name: str, path: Path, rows: int | None) ->
             fix=f"`modelport status {name}` shows where its newest version is.",
         )
     with tempfile.TemporaryDirectory() as tmp:
-        spec = load_spec(
+        return load_spec(
             services.store.download(champion.tags[Tag.TRAIN_RUN_ID], "spec/model.yaml", Path(tmp))
         )
+
+
+def predict_rows(services: Services, name: str, path: Path, rows: int | None) -> dict[str, Any]:
+    """Send a file's rows to the model's endpoint.
+
+    Raises:
+        NotFoundError: the model has no champion (nothing is served).
+        SignatureMismatchError: the file does not fit the champion's signature.
+    """
+    spec = champion_spec(services, name)
     frame = read_input_file(path, spec.signature.inputs)
     if rows is not None:
         frame = frame.head(rows)

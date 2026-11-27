@@ -389,8 +389,39 @@ def v05d(ctx: Context) -> None:
     require(not problems, "; ".join(problems))
 
 
+DRILL_ZERO_DOWNTIME = ROOT / ".data" / "drill-zero-downtime.json"
+MIN_DRILL_REQUESTS: Final = 300
+
+
+def zero_downtime_problems(drill: Mapping[str, Any]) -> list[str]:
+    """What the zero-downtime drill's result breaks of FR-11: no failed request while the champion changed."""
+    problems = []
+    if drill["failed"]:
+        problems.append(
+            f"{drill['failed']} of {drill['sent']} requests failed ({drill.get('status_counts')})"
+        )
+    if drill["sent"] < MIN_DRILL_REQUESTS:
+        problems.append(f"only {drill['sent']} requests sent (at least {MIN_DRILL_REQUESTS})")
+    if drill["champion_before"] == drill["champion_after"]:
+        problems.append(f"the champion stayed v{drill['champion_after']}")
+    elif not drill["promoted_during_load"]:
+        problems.append("the promotion finished after the load ended")
+    return problems
+
+
+def v11(ctx: Context) -> None:
+    """After bench/drills/zero_downtime.sh: a promotion under load with no failed request (FR-11)."""
+    require(
+        DRILL_ZERO_DOWNTIME.is_file(),
+        f"{DRILL_ZERO_DOWNTIME.relative_to(ROOT)} missing (run the drill first)",
+    )
+    problems = zero_downtime_problems(json.loads(DRILL_ZERO_DOWNTIME.read_text(encoding="utf-8")))
+    require(not problems, "; ".join(problems))
+
+
 CHECKS: dict[str, Callable[[Context], None]] = {
     "V-09": v09,
+    "V-11": v11,
     "V-01": v01,
     "V-02": v02,
     "V-04": v04,

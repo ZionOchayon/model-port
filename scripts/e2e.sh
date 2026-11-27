@@ -40,10 +40,12 @@ if [[ $STAGE != v0.1 ]]; then
   group ops wait-dataset covertype 1 --timeout 900
   group mp submit "$TAB" --wait --timeout 3600
   group ops wait-alias covertype-classifier champion --timeout 2400
+  group ops wait-dag-run deploy_candidate deploy__covertype-classifier__v1 --timeout 1800
   group make ui # the Serve Service exists only once a model is served
   group mp predict fashion-classifier "$IMG/example/input.parquet"
   group mp predict covertype-classifier "$TAB/example/input.parquet"
-  checks=$checks,V-09
+  group bash bench/drills/zero_downtime.sh fashion-classifier
+  checks=$checks,V-09,V-11
 fi
 if [[ $STAGE == v0.3 ]]; then
   echo "e2e: stage $STAGE is not implemented yet" >&2
