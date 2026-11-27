@@ -8,6 +8,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Canary judge: the candidate's live error rate and p95 latency, read from Prometheus over the observation
+  window, against its limits and the champion's; every failed rule is reported.
 - Prometheus on every profile (kube-prometheus-stack; Grafana and Alertmanager on the full profile only),
   scraping every Ray head and worker and the KubeRay operator.
 - The RayService `modelport-serve` built from registry state: Airflow renders what every model should serve
