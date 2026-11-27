@@ -434,3 +434,11 @@ def test_predict_too_many_rows_exit_4_suggests_rows(services, monkeypatch, tmp_p
     assert result.exit_code == 4, result.output
     assert "--rows" in result.output
     assert serve.calls == []
+
+
+def test_promote_wait_prints_aliases_as_versions(services):
+    served(services.registry)
+    result = run("promote", "tiny-model", "3", "--yes", "--wait")
+    assert result.exit_code == 0, result.output
+    snapshot = services.registry.snapshot("tiny-model")
+    assert f"champion v{snapshot.champion}   previous v{snapshot.previous}" in result.output

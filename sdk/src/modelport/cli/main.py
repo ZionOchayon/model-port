@@ -488,7 +488,8 @@ def _serve_command(
         typer.echo(f"{action.capitalize()} {name} to v{result['target']}: {result['url']}")
         if wait:
             aliases = result["aliases"]
-            typer.echo(f"  champion v{aliases['champion']}   previous {aliases['previous'] or '-'}")
+            previous = f"v{aliases['previous']}" if aliases["previous"] else "-"
+            typer.echo(f"  champion v{aliases['champion']}   previous {previous}")
         else:
             typer.echo(f"Next: modelport status {name}")
 
