@@ -45,7 +45,8 @@ if [[ $STAGE != v0.1 ]]; then
   group mp predict fashion-classifier "$IMG/example/input.parquet"
   group mp predict covertype-classifier "$TAB/example/input.parquet"
   group bash bench/drills/zero_downtime.sh fashion-classifier
-  checks=$checks,V-09,V-11
+  group bash bench/drills/canary_failure.sh covertype-classifier
+  checks=$checks,V-09,V-10,V-11
 fi
 if [[ $STAGE == v0.3 ]]; then
   echo "e2e: stage $STAGE is not implemented yet" >&2

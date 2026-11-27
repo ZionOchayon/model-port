@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Canary failure drill `bench/drills/canary_failure.sh` and check V-10: a version that passed the gate
+  fails half its live requests during its canary, and is rolled back and rejected for its error rate
+  while the champion keeps serving.
 - Zero-downtime drill `bench/drills/zero_downtime.sh` and check V-11: a new version is canaried and promoted
   while constant load runs, and no request may fail. The load generator runs from a workstation with
   `python -m modelport_platform.tools.loadgen --model NAME --rows FILE` and exits 1 on any failed request.

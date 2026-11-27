@@ -419,7 +419,75 @@ def v11(ctx: Context) -> None:
     require(not problems, "; ".join(problems))
 
 
+DRILL_CANARY_FAILURE = ROOT / ".data" / "drill-canary-failure.json"
+
+
+def canary_failure_problems(
+    model: str,
+    version: str,
+    *,
+    state: str,
+    tags: Mapping[str, str],
+    aliases: Mapping[str, str | None],
+    champion_before: str,
+    apps: Sequence[str],
+) -> list[str]:
+    """What breaks FR-10 after the canary failure drill: the faulty version must be rolled back cleanly."""
+    from modelport.naming import Tag
+
+    problems = []
+    if state != "rejected":
+        problems.append(f"v{version} is {state}, not rejected")
+    reasons = json.loads(tags.get(Tag.CANARY_REASONS) or "[]")
+    if tags.get(Tag.CANARY_RESULT) != "failed":
+        problems.append(f"canary result is {tags.get(Tag.CANARY_RESULT)}, not failed")
+    elif not any("error rate" in r for r in reasons):
+        problems.append(f"no error-rate reason: {reasons}")
+    held = [alias for alias, v in sorted(aliases.items()) if v == version]
+    if held:
+        problems.append(f"v{version} still has the alias {', '.join(held)}")
+    if aliases.get("champion") != champion_before:
+        problems.append(f"the champion changed from v{champion_before} to v{aliases.get('champion')}")
+    if f"{model}--candidate" in apps:
+        problems.append(f"the RayService still serves {model}--candidate")
+    return problems
+
+
+def v10(ctx: Context) -> None:
+    """After bench/drills/canary_failure.sh: the faulty version is rejected and the champion kept serving."""
+    require(
+        DRILL_CANARY_FAILURE.is_file(),
+        f"{DRILL_CANARY_FAILURE.relative_to(ROOT)} missing (run the drill first)",
+    )
+    drill = json.loads(DRILL_CANARY_FAILURE.read_text(encoding="utf-8"))
+    model, version = drill["model"], drill["version"]
+    run = ctx.airflow.get_run("deploy_candidate", drill["run_id"])
+    require(
+        run and run.state == "success", f"drill run {drill['run_id']} is {run.state if run else 'absent'}"
+    )
+    info = ctx.registry.get_version(model, version)
+    snapshot = ctx.registry.snapshot(model)
+    config = _kubectl(
+        "get", "rayservice", "-n", "ray", "modelport-serve", "-o", "jsonpath={.spec.serveConfigV2}"
+    )
+    problems = canary_failure_problems(
+        model,
+        version,
+        state=str(info.state),
+        tags=info.tags,
+        aliases={
+            "champion": snapshot.champion,
+            "previous": snapshot.previous,
+            "candidate": snapshot.candidate,
+        },
+        champion_before=drill["champion_before"],
+        apps=list(pip_by_app(config)),
+    )
+    require(not problems, "; ".join(problems))
+
+
 CHECKS: dict[str, Callable[[Context], None]] = {
+    "V-10": v10,
     "V-09": v09,
     "V-11": v11,
     "V-01": v01,

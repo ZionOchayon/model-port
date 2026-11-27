@@ -130,3 +130,36 @@ def test_zero_downtime_problems():
     ]
     late = {**good, "promoted_during_load": False}
     assert verify.zero_downtime_problems(late) == ["the promotion finished after the load ended"]
+
+
+def test_canary_failure_problems():
+    tags = {
+        "modelport.canary.result": "failed",
+        "modelport.canary.reasons": '["error rate 0.480 > max_error_rate 0.010"]',
+    }
+    aliases = {"champion": "1", "previous": None, "candidate": None}
+    ok = {
+        "state": "rejected",
+        "tags": tags,
+        "aliases": aliases,
+        "champion_before": "1",
+        "apps": ["m", "m--champion"],
+    }
+    assert verify.canary_failure_problems("m", "2", **ok) == []
+    bad = {
+        **ok,
+        "state": "candidate",
+        "tags": {
+            "modelport.canary.result": "failed",
+            "modelport.canary.reasons": '["only 3 requests (need 50)"]',
+        },
+        "aliases": {**aliases, "candidate": "2", "champion": "2"},
+        "apps": ["m", "m--champion", "m--candidate"],
+    }
+    assert verify.canary_failure_problems("m", "2", **bad) == [
+        "v2 is candidate, not rejected",
+        "no error-rate reason: ['only 3 requests (need 50)']",
+        "v2 still has the alias candidate, champion",
+        "the champion changed from v1 to v2",
+        "the RayService still serves m--candidate",
+    ]
