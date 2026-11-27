@@ -6,8 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-27
+
 ### Added
 
+- Documentation for v0.1: README quickstart, scope and known gaps; component guides for the SDK, CLI,
+  `model.yaml`, ingest, training, the gate and the infrastructure (every Helm key and manifest); a runbook;
+  and `scripts/check_docs.py`, which CI runs to keep every command, field, DAG, key and target documented.
 - Worker-failure drill (`bench/drills/kill_worker.sh`): a Ray Train worker is killed after the first
   checkpoint, and `verify.py` V-05d checks that training resumed instead of restarting.
 - Repository skeleton: uv workspace with the `modelport` SDK and `modelport-platform` packages,
@@ -75,3 +80,6 @@ All notable changes to this project are documented here. The format follows
 - `model.yaml` spec (`ModelSpec`) with field-path error messages and its exported JSON Schema.
 - Local Ray Train integration test: TorchTrainer with DDP (gloo), a checkpoint per epoch and resume; XGBoostTrainer
   with a checkpoint per boosting round and resume.
+
+[Unreleased]: https://github.com/ZionOchayon/model-port/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/ZionOchayon/model-port/releases/tag/v0.1.0

@@ -73,6 +73,9 @@ jobs:
       - name: Tests (unit, contract, local integration)
         run: make test
 
+      - name: Docs coverage (the latest released stage)
+        run: uv run python scripts/check_docs.py
+
       # Each chart is linted once its values file exists in the repo.
       - name: Helm lint
         run: |
