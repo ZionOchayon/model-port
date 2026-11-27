@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Serving building blocks: the HTTP contract shared by Serve and the CLI (`PredictRequest`, `PredictResponse`,
+  input files as JSON, CSV, Parquet or one image), and a Ray Serve application per model version that
+  refuses to start when the version fails its signature self-test, answers bad input with 422, exports
+  model metrics and logs sampled requests to `s3://inference-logs/` for drift.
+
 ## [0.1.0] - 2026-11-27
 
 ### Added

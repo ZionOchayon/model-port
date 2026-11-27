@@ -38,8 +38,8 @@ JOB_LIFECYCLE: Final = "modelport_lifecycle"
 JOB_JOBS: Final = "modelport_jobs"
 
 CONFIDENCE_BUCKETS: Final[tuple[float, ...]] = (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 1.0)
+# Ray histograms need positive bounds; values <= 0.1 land in the first bucket
 INPUT_STAT_BUCKETS: Final[tuple[float, ...]] = (
-    0,
     0.1,
     0.2,
     0.3,
