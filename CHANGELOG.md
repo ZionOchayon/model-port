@@ -26,6 +26,8 @@ All notable changes to this project are documented here. The format follows
   client settings and structured logging.
 - `modelport validate DIR`: twelve ordered checks with a fix for each failure, no cluster needed; global
   `--json`, `--debug` and `--version`.
+- `examples/datasets/prepare.py`: downloads Fashion-MNIST, EuroSAT or Covertype, converts them to the
+  ingest layout and uploads training files, corrupt files or batch input.
 - Example model 2: a Covertype tree-cover classifier (XGBoost on Ray Train), with its own dependencies.
 - Example model 1: an image classifier (ResNet-18, PyTorch DDP) with EuroSAT and Fashion-MNIST spec files.
 - Training helpers for `train_loop`: `modelport.report()` (per-epoch metrics and checkpoint, rank 0 only)
