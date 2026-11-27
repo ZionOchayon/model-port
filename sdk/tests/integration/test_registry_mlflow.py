@@ -163,3 +163,10 @@ def test_ensure_run_finds_by_key_tag_and_keeps_first_params(registry):
     run = registry.client.get_run(first)
     assert run.data.params == {"epochs": "2"}
     assert run.data.tags[Tag.MODEL] == "m"
+
+
+def test_run_tags(registry):
+    run_id = registry.ensure_run(
+        "e", "r", Tag.TRAIN_RAYJOB, {Tag.TRAIN_RAYJOB: "r", Tag.CODE_SHA256: "c"}, {}
+    )
+    assert registry.run_tags(run_id)[Tag.CODE_SHA256] == "c"

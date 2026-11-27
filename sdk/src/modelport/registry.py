@@ -321,6 +321,10 @@ class MlflowRegistry:
         """`models:/<name>/<version>`."""
         return f"models:/{name}/{version}"
 
+    def run_tags(self, run_id: str) -> dict[str, str]:
+        """All tags of one run."""
+        return dict(self._call(lambda: self.client.get_run(run_id)).data.tags)
+
     def ensure_run(
         self, experiment: str, run_name: str, key_tag: Tag, tags: Mapping[str, str], params: Mapping[str, Any]
     ) -> str:

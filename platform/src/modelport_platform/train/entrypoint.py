@@ -6,32 +6,41 @@ model class. Exit codes: 0 trained, 1 training failed, 2 spec or data problem.
 
 import argparse
 import sys
+import tempfile
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
+import mlflow
+import pandas as pd
+
 from modelport.errors import ModelportError
 from modelport.logs import configure_logging, get_logger
 from modelport.naming import Tag, experiment_training
-from modelport.spec import load_spec
+from modelport.spec import load_spec, spec_sha256
+from modelport.validate import EXAMPLE_FILE
 from modelport_platform.ingest.versioning import DatasetVersion
 from modelport_platform.ports import DatasetStore
 from modelport_platform.settings import PlatformSettings
 from modelport_platform.train.data import load_split, resolve_dataset_version
+from modelport_platform.train.register import Lineage, VersionRegistry, register_version
 from modelport_platform.train.strategies import STRATEGIES, TrainContext, TrainerStrategy
 
 _log = get_logger(__name__)
 
 
-class TrainingRuns(Protocol):
+class TrainingRuns(VersionRegistry, Protocol):
     """The part of the registry the entrypoint needs."""
 
     def ensure_run(
         self, experiment: str, run_name: str, key_tag: Tag, tags: Mapping[str, str], params: Mapping[str, Any]
     ) -> str:
         """Find or create the training run."""
+
+    def run_tags(self, run_id: str) -> Mapping[str, str]:
+        """Tags of a run (the submission run holds the code hash)."""
 
 
 @dataclass
@@ -43,6 +52,7 @@ class Deps:
     settings: PlatformSettings
     strategies: Mapping[str, TrainerStrategy] = field(default_factory=lambda: dict(STRATEGIES))
     read_split: Callable[[PlatformSettings, DatasetVersion, str], Any] = load_split
+    register: Callable[..., Any] = register_version
     cwd: Path = field(default_factory=Path.cwd)
 
 
@@ -126,6 +136,36 @@ def train(args: argparse.Namespace, deps: Deps) -> int:
         seconds=round(time.monotonic() - start),
         metrics=dict(result.metrics),
     )
+    spec_path = deps.cwd / args.spec_file
+    lineage = Lineage(
+        dataset=version.dataset,
+        dataset_version=version.version,
+        dataset_sha256=version.sha256,
+        val_uri=f"{version.uri}/val.parquet",
+        code_sha256=deps.registry.run_tags(args.submission_run_id)[Tag.CODE_SHA256],
+        spec_sha256=spec_sha256(spec_path),
+        submission_run_id=args.submission_run_id,
+        train_run_id=run_id,
+        train_rayjob=args.rayjob,
+        image=deps.settings.ray_image,
+        runtime_pip=tuple(spec.runtime.pip),
+        framework=spec.framework,
+    )
+    with tempfile.TemporaryDirectory() as tmp:
+        try:
+            info = deps.register(
+                spec=spec,
+                spec_path=spec_path,
+                model_dir=deps.cwd,
+                weights_dir=Path(result.checkpoint.to_directory(tmp)),
+                val=ctx.datasets["val"].to_pandas(),
+                example=pd.read_parquet(deps.cwd / EXAMPLE_FILE),
+                lineage=lineage,
+                registry=deps.registry,
+            )
+        except ModelportError as err:
+            return _fail(1, f"Registration failed: {err.what}", err.fix)
+    print(f"registered {spec.name} version {info.version}")
     return 0
 
 
@@ -136,6 +176,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     configure_logging(json=True)
     settings = PlatformSettings.from_env()
+    mlflow.set_tracking_uri(settings.mlflow_uri)  # register_version logs through the fluent API
     deps = Deps(
         store=S3DatasetStore(boto3_client(settings)),
         registry=MlflowRegistry(settings.mlflow_uri),

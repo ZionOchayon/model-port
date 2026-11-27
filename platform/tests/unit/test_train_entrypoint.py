@@ -1,6 +1,10 @@
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
+import pandas as pd
+
+from modelport.spec import Framework, spec_sha256
 from modelport_platform.train import entrypoint
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -15,9 +19,29 @@ class FakeRegistry:
         self.runs.append((experiment, run_name, dict(tags)))
         return "train-run-1"
 
+    def run_tags(self, run_id):
+        assert run_id == "sub-1"
+        return {"modelport.code_sha256": "c" * 64}
+
+
+class FakeCheckpoint:
+    def to_directory(self, path):
+        return path
+
+
+class FakeDataset:
+    def __init__(self, split):
+        self.split = split
+
+    def to_pandas(self):
+        return pd.DataFrame({"image": [b"x"], "label": ["Bag"]})
+
+
+CHECKPOINT = FakeCheckpoint()
+
 
 class FakeResult:
-    def __init__(self, error=None, checkpoint=None):
+    def __init__(self, error=None, checkpoint=CHECKPOINT):
         self.error, self.checkpoint, self.metrics = error, checkpoint, {"epoch": 1}
 
 
@@ -41,12 +65,21 @@ class FakeStrategy:
 
 def deps(store, settings, result=None, cwd=MODEL):
     strategy = FakeStrategy(result or FakeResult())
+    registered = []
+
+    def register(**kwargs):
+        registered.append(kwargs)
+        return SimpleNamespace(version="7")
+
+    register.calls = registered
+
     return entrypoint.Deps(
         store=store,
         registry=FakeRegistry(),
         settings=settings,
         strategies={"torch": strategy, "xgboost": strategy},
-        read_split=lambda settings, version, split: f"{split}-dataset",
+        read_split=lambda settings, version, split: FakeDataset(split),
+        register=register,
         cwd=cwd,
     ), strategy
 
@@ -108,11 +141,8 @@ def test_no_checkpoint_exit_1_with_fix(store, platform_settings, capsys):
     assert "train_loop finished without reporting artifacts" in err
     assert "modelport.report(metrics, artifacts_dir)" in err
     ctx = strategy.contexts[0]
-    assert (ctx.run_name, ctx.mlflow_run_id, dict(ctx.datasets)) == (
-        "train-fashion-classifier-1",
-        "train-run-1",
-        {"train": "train-dataset", "val": "val-dataset"},
-    )
+    assert (ctx.run_name, ctx.mlflow_run_id) == ("train-fashion-classifier-1", "train-run-1")
+    assert {k: v.split for k, v in ctx.datasets.items()} == {"train": "train", "val": "val"}
     experiment, run_name, tags = d.registry.runs[0]
     assert (experiment, run_name) == ("modelport-train/fashion-classifier", "train-fashion-classifier-1")
     assert tags["modelport.dataset_version"] == "1"
@@ -139,3 +169,21 @@ def test_pinned_version_used_when_no_override(store, platform_settings):
     assert d.registry.runs[0][2]["modelport.dataset_version"] == "1"
     entrypoint.train(args(), d)
     assert d.registry.runs[1][2]["modelport.dataset_version"] == "2"
+
+
+def test_success_registers_with_lineage(store, platform_settings):
+    with_version(store, 1)
+    d, _ = deps(store, platform_settings)
+    assert entrypoint.train(args(), d) == 0
+    (kwargs,) = d.register.calls
+    lineage = kwargs["lineage"]
+    assert (lineage.dataset, lineage.dataset_version, lineage.dataset_sha256) == ("fashion-mnist", 1, "ab")
+    assert lineage.val_uri == "s3://datasets/fashion-mnist/v1/val.parquet"
+    assert (lineage.code_sha256, lineage.spec_sha256) == ("c" * 64, spec_sha256(MODEL / "model.fashion.yaml"))
+    assert (lineage.submission_run_id, lineage.train_run_id) == ("sub-1", "train-run-1")
+    assert (lineage.train_rayjob, lineage.framework) == ("train-fashion-classifier-1", Framework.TORCH)
+    assert lineage.image == platform_settings.ray_image
+    assert kwargs["spec_path"] == MODEL / "model.fashion.yaml"
+    assert kwargs["model_dir"] == MODEL
+    assert list(kwargs["val"].columns) == ["image", "label"]
+    assert len(kwargs["example"]) == len(pd.read_parquet(MODEL / "example" / "input.parquet"))
