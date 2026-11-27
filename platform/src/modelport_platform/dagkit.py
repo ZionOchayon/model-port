@@ -5,20 +5,23 @@ tests call the same functions with fakes. Nothing here imports Airflow at module
 """
 
 import tempfile
+from collections.abc import Collection
 from datetime import datetime, timedelta
 from enum import StrEnum
 from functools import cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Final
+from typing import TYPE_CHECKING, Any, Final, Protocol
 
 from modelport.logs import get_logger
 from modelport.naming import Tag
-from modelport.registry import ArtifactStore, MlflowRegistry, VersionInfo
+from modelport.registry import ArtifactStore, MlflowRegistry, ModelRegistry, VersionInfo
 from modelport.spec import ModelSpec, load_spec
-from modelport_platform.kube import KubeClient, Plural, RayJobPhase, rayjob_status
+from modelport_platform.kube import KubeClient, Plural, RayJobPhase, rayjob_status, rayservice_apps_ready
 from modelport_platform.ports import KubeApi
 from modelport_platform.ray.jobs import SharedClusterJobs
+from modelport_platform.ray.manifests import build_rayservice
 from modelport_platform.s3 import S3DatasetStore, boto3_client
+from modelport_platform.serve.config import ServedModel, render_serve_config, served_model_from_spec
 from modelport_platform.settings import PlatformSettings
 
 if TYPE_CHECKING:
@@ -109,3 +112,72 @@ def rayjob_poke(k: KubeApi, name: str) -> "PokeReturnValue":
         "duration_s": _seconds(status.start_time, status.end_time),
     }
     return PokeReturnValue(is_done=True, xcom_value=timing)
+
+
+class ServeRegistry(ModelRegistry, ArtifactStore, Protocol):
+    """What rendering the serve state reads: aliases, model tags, versions and their training specs."""
+
+
+def desired_serve_state(reg: ServeRegistry) -> list[ServedModel]:
+    """Every model the RayService should serve, from the registry alone (aliases and serve tags).
+
+    A model is served when it has a `champion`, or a serve candidate (`modelport.serve.candidate_version`,
+    set by deploy_candidate or serve_sync; the `candidate` alias alone does not serve a version). The spec
+    of the champion (else of the candidate) gives resources and thresholds.
+    """
+    served = []
+    for name in reg.list_models():
+        snapshot = reg.snapshot(name)
+        tags = reg.model_tags(name)
+        candidate_version = tags.get(Tag.SERVE_CANDIDATE_VERSION) or None
+        if snapshot.champion is None and candidate_version is None:
+            continue
+        champion = reg.get_version(name, snapshot.champion) if snapshot.champion else None
+        candidate = reg.get_version(name, candidate_version) if candidate_version else None
+        owner = champion or candidate
+        assert owner is not None
+        served.append(
+            served_model_from_spec(
+                spec_for_version(reg, owner),
+                champion,
+                candidate,
+                candidate_weight=float(tags.get(Tag.SERVE_CANDIDATE_WEIGHT) or 0.0),
+                fault_error_rate=float(tags.get(Tag.SERVE_FAULT_ERROR_RATE) or 0.0),
+            )
+        )
+    return served
+
+
+def apply_serve_state(reg: ServeRegistry, k: KubeApi, s: PlatformSettings) -> list[str]:
+    """Render the whole serve config and write it to the RayService; returns the app names to wait for.
+
+    Runs only in pool `serve_config`, so two DAGs never write competing configs.
+    """
+    config = render_serve_config(desired_serve_state(reg), env_vars={"MLFLOW_TRACKING_URI": s.mlflow_uri})
+    body = build_rayservice(serve_config=config, settings=s)
+    _, created = k.ensure(Plural.RAYSERVICES, body)
+    if not created:
+        k.merge_patch(
+            Plural.RAYSERVICES, s.rayservice_name, {"spec": {"serveConfigV2": body["spec"]["serveConfigV2"]}}
+        )
+    apps = [str(app["name"]) for app in config["applications"]]
+    _log.info("serve.applied", created=created, apps=apps)
+    return apps
+
+
+def rayservice_ready_poke(k: KubeApi, apps: Collection[str], *, name: str | None = None) -> "PokeReturnValue":
+    """Sensor poke: done when the RayService runs every app of its current generation.
+
+    Raises:
+        AirflowFailException: an expected app is DEPLOY_FAILED (fail fast instead of waiting it out).
+    """
+    from airflow.sdk import PokeReturnValue
+    from airflow.sdk.exceptions import AirflowFailException
+
+    obj = k.get(Plural.RAYSERVICES, name or settings().rayservice_name)
+    if obj is None:
+        return PokeReturnValue(is_done=False)
+    ready, failure = rayservice_apps_ready(obj, apps)
+    if failure is not None:
+        raise AirflowFailException(failure)
+    return PokeReturnValue(is_done=ready)

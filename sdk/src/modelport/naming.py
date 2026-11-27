@@ -56,6 +56,10 @@ class Tag(StrEnum):
     LATEST_CODE_SHA256 = "modelport.latest_code_sha256"
     LATEST_SPEC_FILE = "modelport.latest_spec_file"
     AUTO_RETRAIN = "modelport.auto_retrain"  # "true" | "false"
+    # serve intent on the registered model: what the RayService should serve besides the champion
+    SERVE_CANDIDATE_VERSION = "modelport.serve.candidate_version"
+    SERVE_CANDIDATE_WEIGHT = "modelport.serve.candidate_weight"
+    SERVE_FAULT_ERROR_RATE = "modelport.serve.fault_error_rate"
     # submission run tags
     MODEL = "modelport.model"
     SUBMISSION_KEY = "modelport.submission_key"

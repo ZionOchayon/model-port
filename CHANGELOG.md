@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- The RayService `modelport-serve` built from registry state: Airflow renders what every model should serve
+  (its champion, plus a candidate during a canary) and applies it; a sensor waits until every app runs and
+  fails fast when one cannot deploy.
 - Serve routing and configuration: a router per model at `/<model>/predict` that splits traffic between
   champion and candidate by weight with no fallback, and the RayService `serveConfigV2` rendered from the
   desired state of every model, each version with its own runtime environment.

@@ -4,6 +4,7 @@ The head always has `num-cpus: 0`, so every Train worker gets its own worker pod
 """
 
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Final
 
@@ -190,6 +191,45 @@ def build_train_rayjob(
                 worker=train_worker_sizing(spec, settings.profile),
                 # one logical CPU more than Train takes, so the Ray Data reads feeding it can run
                 ray_resources={"CPU": str(math.ceil(train.cpus_per_worker) + 1), TRAIN_SLOT: "1"},
+            ),
+        },
+    }
+
+
+def serve_workers(profile: Profile) -> int:
+    """Serve worker pods: 1 on smoke, 2 on full."""
+    return 1 if profile is Profile.SMOKE else 2
+
+
+def build_rayservice(*, serve_config: Mapping[str, Any], settings: PlatformSettings) -> dict[str, Any]:
+    """The one RayService that serves every model; only `serveConfigV2` changes after creation.
+
+    `upgradeStrategy: NewCluster` is explicit so the default-on incremental upgrade never needs a Gateway
+    (ADR-0007); KubeRay applies a changed `serveConfigV2` in place.
+    """
+    labels = {"modelport.dev/kind": "serve"}
+    workers = serve_workers(settings.profile)
+    return {
+        "apiVersion": "ray.io/v1",
+        "kind": "RayService",
+        "metadata": {
+            "name": settings.rayservice_name,
+            "namespace": settings.ray_namespace,
+            "labels": {**_PART_OF, **labels},
+        },
+        "spec": {
+            "serviceUnhealthySecondThreshold": 900,
+            "deploymentUnhealthySecondThreshold": 300,
+            "upgradeStrategy": {"type": "NewCluster"},
+            "serveConfigV2": yaml.safe_dump(dict(serve_config), sort_keys=True),
+            "rayClusterConfig": _cluster_spec(
+                labels=labels,
+                image=settings.ray_image,
+                head=head_sizing(settings.profile),
+                group_name="serve",
+                workers=workers,
+                worker_cpus=2,
+                worker=serve_worker_sizing(settings.profile),
             ),
         },
     }

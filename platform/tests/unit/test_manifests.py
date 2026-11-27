@@ -98,3 +98,42 @@ def test_pods_get_platform_env_and_sizing():
         "containers"
     ][0]
     assert smoke["resources"]["requests"]["cpu"] == "250m"
+
+
+SERVE_CONFIG = {
+    "http_options": {"host": "0.0.0.0", "port": 8000},
+    "applications": [{"name": "m", "route_prefix": "/m", "import_path": "x:y", "args": {"model": "m"}}],
+}
+
+
+def rayservice(profile="smoke"):
+    from modelport_platform.ray.manifests import build_rayservice
+
+    settings = PlatformSettings.from_env({**ENV, "MODELPORT_PROFILE": profile})
+    return build_rayservice(serve_config=SERVE_CONFIG, settings=settings)
+
+
+@pytest.mark.parametrize("profile", ["smoke", "full"])
+def test_rayservice_snapshot(profile):
+    rendered = yaml.safe_dump(rayservice(profile), sort_keys=False)
+    assert rendered == (SNAPSHOTS / f"rayservice_{profile}.yaml").read_text(encoding="utf-8")
+
+
+def test_rayservice_upgrade_strategy_new_cluster():
+    spec = rayservice()["spec"]
+    assert spec["upgradeStrategy"] == {"type": "NewCluster"}
+    head = spec["rayClusterConfig"]["headGroupSpec"]
+    assert head["rayStartParams"]["num-cpus"] == "0"
+    workers = spec["rayClusterConfig"]["workerGroupSpecs"][0]
+    assert (workers["groupName"], workers["replicas"], workers["rayStartParams"]["num-cpus"]) == (
+        "serve",
+        1,
+        "2",
+    )
+    assert rayservice("full")["spec"]["rayClusterConfig"]["workerGroupSpecs"][0]["replicas"] == 2
+
+
+def test_serve_config_embedded_sorted():
+    embedded = rayservice()["spec"]["serveConfigV2"]
+    assert embedded == yaml.safe_dump(SERVE_CONFIG, sort_keys=True)
+    assert yaml.safe_load(embedded) == SERVE_CONFIG
