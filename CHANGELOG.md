@@ -8,6 +8,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Prometheus on every profile (kube-prometheus-stack; Grafana and Alertmanager on the full profile only),
+  scraping every Ray head and worker and the KubeRay operator.
 - The RayService `modelport-serve` built from registry state: Airflow renders what every model should serve
   (its champion, plus a candidate during a canary) and applies it; a sensor waits until every app runs and
   fails fast when one cannot deploy.

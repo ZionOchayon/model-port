@@ -50,9 +50,17 @@ MLFLOW_POD_IMAGE=$(mirror "$MLFLOW_IMAGE")
 step "4 namespaces"; $k apply -f deploy/manifests/base/namespaces.yaml > /dev/null
 step "5 secrets"; bash scripts/secrets.sh
 
-step "7 KubeRay"
 helm repo add kuberay https://ray-project.github.io/kuberay-helm/ --force-update > /dev/null
 helm repo add apache-airflow https://airflow.apache.org --force-update > /dev/null
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts --force-update > /dev/null
+
+step "6 monitoring"
+kps_values=(-f deploy/helm/kube-prometheus-stack.values.yaml)
+[[ $PROFILE == smoke ]] && kps_values+=(-f deploy/helm/kube-prometheus-stack.smoke.values.yaml)
+helm --kube-context kind-modelport upgrade --install kps prometheus-community/kube-prometheus-stack \
+  --version "$KPS_CHART_VERSION" -n monitoring "${kps_values[@]}" --wait --timeout 10m > /dev/null
+
+step "7 KubeRay"
 helm --kube-context kind-modelport upgrade --install kuberay-operator kuberay/kuberay-operator --version "$KUBERAY_VERSION" \
   -n ray -f deploy/helm/kuberay-operator.values.yaml --wait --timeout 5m > /dev/null
 
@@ -104,6 +112,9 @@ for pool in "ray_training $slots training RayJobs" "shared_cluster $slots evalua
   read -r name n description <<< "$pool"
   $k exec -n platform "$scheduler" -c scheduler -- airflow pools set "$name" "$n" "$description" > /dev/null
 done
+
+step "13 monitoring objects"
+$k apply -k deploy/monitoring > /dev/null
 
 step "14 wait all"
 remaining=$(( UP_TIMEOUT - ($(date +%s) - start) ))

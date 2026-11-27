@@ -1,0 +1,14 @@
+# Smoke profile (CI): Prometheus and the exporters only, smaller and shorter-lived.
+defaultRules:
+  create: false # the platform's own rules are enough for CI
+alertmanager:
+  enabled: false
+grafana:
+  enabled: false
+prometheus:
+  prometheusSpec:
+    retention: 1d
+    retentionSize: 512MB
+    resources:
+      requests: { cpu: 100m, memory: 384Mi }
+      limits: { cpu: "1", memory: 1Gi }

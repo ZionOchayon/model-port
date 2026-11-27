@@ -1,0 +1,103 @@
+# kube-prometheus-stack 93.11.1: Prometheus, the operator, kube-state-metrics, node-exporter, Alertmanager, Grafana.
+fullnameOverride: kps
+crds:
+  enabled: true # PodMonitor, ServiceMonitor and PrometheusRule CRDs; installed before KubeRay needs them
+
+# The control-plane rules need targets kind does not expose (etcd, scheduler, controller-manager, kube-proxy).
+defaultRules:
+  create: true
+  rules:
+    etcd: false
+    kubeSchedulerAlerting: false
+    kubeSchedulerRecording: false
+    kubeControllerManager: false
+    kubeProxy: false
+    windows: false
+
+# Scrape targets kind does not expose.
+windowsMonitoring: { enabled: false }
+kubeEtcd: { enabled: false }
+kubeScheduler: { enabled: false }
+kubeControllerManager: { enabled: false }
+kubeProxy: { enabled: false }
+
+prometheus-node-exporter:
+  hostRootFsMount: { enabled: false } # rslave mounts fail on Docker Desktop
+  resources:
+    requests: { cpu: 10m, memory: 32Mi }
+    limits: { cpu: 200m, memory: 128Mi }
+
+kube-state-metrics:
+  resources: # pod readiness, restarts and termination reasons for the platform alerts
+    requests: { cpu: 10m, memory: 64Mi }
+    limits: { cpu: 200m, memory: 256Mi }
+
+prometheusOperator:
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+
+prometheus:
+  prometheusSpec:
+    scrapeInterval: 15s
+    evaluationInterval: 30s
+    retention: 2d # a development stack: enough for the dashboards and the drills
+    retentionSize: 1GB
+    # Select every PodMonitor, ServiceMonitor, rule, probe and scrape config, not only the chart's own.
+    podMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    probeSelectorNilUsesHelmValues: false
+    scrapeConfigSelectorNilUsesHelmValues: false
+    resources:
+      requests: { cpu: 100m, memory: 512Mi }
+      limits: { cpu: "1", memory: 1536Mi }
+    storageSpec: # kind's default StorageClass
+      volumeClaimTemplate:
+        spec:
+          storageClassName: standard
+          accessModes: [ReadWriteOnce]
+          resources: { requests: { storage: 5Gi } }
+
+alertmanager:
+  enabled: true
+  alertmanagerSpec:
+    resources:
+      requests: { cpu: 10m, memory: 64Mi }
+      limits: { cpu: 100m, memory: 256Mi }
+  config: # alerts are visible in Alertmanager; no receiver sends them anywhere by default
+    global:
+      resolve_timeout: 5m
+    route:
+      receiver: "null"
+      group_by: [alertname, model, application]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+      routes:
+        - receiver: "null"
+          matchers: ['alertname = "Watchdog"']
+    receivers:
+      - name: "null"
+
+grafana:
+  enabled: true
+  fullnameOverride: grafana
+  defaultDashboardsEnabled: false # only modelport's dashboards
+  admin: # Secret grafana-admin from scripts/secrets.sh
+    existingSecret: grafana-admin
+    userKey: admin-user
+    passwordKey: admin-password
+  persistence: { enabled: false } # dashboards come from ConfigMaps
+  resources:
+    requests: { cpu: 50m, memory: 192Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+  sidecar: # loads every ConfigMap labelled grafana_dashboard=1, in the folder its annotation names
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      searchNamespace: ALL
+      folderAnnotation: grafana_folder
+      provider:
+        foldersFromFilesStructure: true

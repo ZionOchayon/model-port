@@ -9,8 +9,8 @@ resources:
 metrics:
   enabled: true
   serviceMonitor:
-    # Needs the monitoring.coreos.com CRDs, so it is enabled once kube-prometheus-stack is installed first.
-    enabled: false
+    # Needs the monitoring.coreos.com CRDs: `make up` installs kube-prometheus-stack before KubeRay.
+    enabled: true
     interval: 30s
     honorLabels: true
     additionalLabels: {}
