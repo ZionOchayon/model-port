@@ -1,30 +1,26 @@
 """Create every modelport S3 bucket idempotently (Job `minio-buckets`, run by `make up`).
 
 Usage: python -m modelport_platform.tools.bootstrap_buckets
-Credentials and endpoint come from the environment (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY,
-AWS_ENDPOINT_URL, AWS_REGION), which the Job gets from the platform ConfigMap and Secret.
+Endpoint and credentials come from the environment (platform settings), which the Job gets from the
+platform ConfigMap and the S3 Secret.
 """
 
 from __future__ import annotations
 
 import sys
-from typing import Any
 
-import boto3
-from botocore.config import Config
 from botocore.exceptions import ClientError
 
 from modelport.naming import Bucket
-
-type S3Client = Any  # boto3 ships no type stubs
+from modelport_platform.s3 import S3Client, boto3_client
+from modelport_platform.settings import PlatformSettings
 
 _ALREADY_THERE = {"BucketAlreadyOwnedByYou", "BucketAlreadyExists"}
 
 
 def s3_client() -> S3Client:
-    """S3 client with path-style addressing and standard retries (MinIO in-cluster)."""
-    config = Config(s3={"addressing_style": "path"}, retries={"max_attempts": 3, "mode": "standard"})
-    return boto3.client("s3", config=config)
+    """The platform S3 client, from the Job's environment (platform ConfigMap + S3 Secret)."""
+    return boto3_client(PlatformSettings.from_env())
 
 
 def bootstrap(client: S3Client) -> list[str]:

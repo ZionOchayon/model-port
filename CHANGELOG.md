@@ -26,6 +26,8 @@ All notable changes to this project are documented here. The format follows
   client settings and structured logging.
 - `modelport validate DIR`: twelve ordered checks with a fix for each failure, no cluster needed; global
   `--json`, `--debug` and `--version`.
+- Platform settings from the environment, the platform ports, and the S3 (MinIO) adapter; a test keeps the
+  pure core free of I/O libraries.
 - `examples/datasets/prepare.py`: downloads Fashion-MNIST, EuroSAT or Covertype, converts them to the
   ingest layout and uploads training files, corrupt files or batch input.
 - Example model 2: a Covertype tree-cover classifier (XGBoost on Ray Train), with its own dependencies.

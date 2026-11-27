@@ -2,15 +2,16 @@
 
 import math
 from collections.abc import Callable
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
 import numpy as np
 import pandas as pd
-from mlflow.models import ModelSignature
-from mlflow.types import ColSpec, Schema
 
 from modelport.errors import SignatureMismatchError
 from modelport.spec import ColumnSpec, ColumnType, ModelSpec
+
+if TYPE_CHECKING:  # MLflow is imported only when a signature is built, so the pure core never loads it
+    from mlflow.models import ModelSignature
 
 OUTPUT_COLUMNS: Final[tuple[tuple[str, ColumnType], ...]] = (
     ("prediction", ColumnType.STRING),
@@ -62,8 +63,11 @@ def _first_bad_row(series: pd.Series, column: ColumnSpec) -> int | None:
     return next((i for i, v in enumerate(series.to_numpy()) if not accepts(v)), None)
 
 
-def build_signature(spec: ModelSpec) -> ModelSignature:
+def build_signature(spec: ModelSpec) -> "ModelSignature":
     """The MLflow signature: model.yaml inputs; fixed outputs prediction (string), confidence (double)."""
+    from mlflow.models import ModelSignature
+    from mlflow.types import ColSpec, Schema
+
     inputs = Schema([ColSpec(type=c.type.value, name=c.name) for c in spec.signature.inputs])
     outputs = Schema([ColSpec(type=t.value, name=name) for name, t in OUTPUT_COLUMNS])
     return ModelSignature(inputs=inputs, outputs=outputs)
