@@ -5,7 +5,7 @@
 set -euo pipefail
 MODEL=${1:-fashion-classifier}
 SRC=examples/models/image-classifier
-EPOCHS=4
+EPOCHS=6 # more than the kill-worker drill's champion (4), so the gate passes clearly
 RPS=5
 DURATION=420 # a deploy with a 2-minute window took about 3.5 minutes on the CI runner
 work=$(mktemp -d)
