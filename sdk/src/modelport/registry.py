@@ -301,6 +301,11 @@ class MlflowRegistry:
         """`models:/<name>/<version>`."""
         return f"models:/{name}/{version}"
 
+    def log_metrics(self, run_id: str, metrics: Mapping[str, float], step: int) -> None:
+        """Log metrics to a run at one step (used by `modelport.report` on rank 0)."""
+        for key, value in metrics.items():
+            self._call(partial(self.client.log_metric, run_id, key, value, step=step))
+
     # ArtifactStore
 
     def _submissions_experiment(self, *, create: bool) -> str | None:

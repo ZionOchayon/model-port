@@ -25,7 +25,8 @@ def configure_logging(*, json: bool, level: str = "INFO") -> None:
             renderer,
         ],
         wrapper_class=structlog.make_filtering_bound_logger(logging.getLevelNamesMapping()[level.upper()]),
-        logger_factory=structlog.PrintLoggerFactory(file=sys.stderr),
+        # Resolve sys.stderr per logger, not once: test runners and the CLI swap the stream.
+        logger_factory=lambda *_: structlog.PrintLogger(file=sys.stderr),
         cache_logger_on_first_use=False,
     )
 

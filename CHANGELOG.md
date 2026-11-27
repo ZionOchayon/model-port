@@ -26,6 +26,8 @@ All notable changes to this project are documented here. The format follows
   client settings and structured logging.
 - `modelport validate DIR`: twelve ordered checks with a fix for each failure, no cluster needed; global
   `--json`, `--debug` and `--version`.
+- Training helpers for `train_loop`: `modelport.report()` (per-epoch metrics and checkpoint, rank 0 only)
+  and `modelport.latest_artifacts()` (resume).
 - MLflow pyfunc adapter: a trained model is logged once (code, weights, spec, signature) and loaded the
   same way by serving, batch and evaluation.
 - MLflow registry adapter: versions, the three aliases, tags, submission runs and artifacts, with
