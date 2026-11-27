@@ -15,6 +15,7 @@ from modelport.loader import instantiate
 from modelport.naming import checkpoint_root
 from modelport.spec import Framework, ModelSpec
 from modelport.training import RUN_ID_ENV
+from modelport_platform.ray.manifests import TRAIN_SLOT
 from modelport_platform.s3 import arrow_filesystem
 from modelport_platform.settings import PlatformSettings
 
@@ -57,9 +58,8 @@ def scaling_config(spec: ModelSpec) -> "ray.train.ScalingConfig":
     from ray.train import ScalingConfig
 
     train = spec.resources.train
-    return ScalingConfig(
-        num_workers=train.workers, use_gpu=False, resources_per_worker={"CPU": train.cpus_per_worker}
-    )
+    per_worker = {"CPU": train.cpus_per_worker, TRAIN_SLOT: 1}  # the slot keeps one Train worker per pod
+    return ScalingConfig(num_workers=train.workers, use_gpu=False, resources_per_worker=per_worker)
 
 
 def run_config(

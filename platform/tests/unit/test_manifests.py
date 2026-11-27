@@ -55,7 +55,13 @@ def test_worker_count_matches_spec():
     group = rayjob()["spec"]["rayClusterSpec"]["workerGroupSpecs"][0]
     workers = SPEC.resources.train.workers
     assert (group["replicas"], group["minReplicas"], group["maxReplicas"]) == (workers, workers, workers)
-    assert group["rayStartParams"]["num-cpus"] == "1"
+    assert "num-cpus" not in group["rayStartParams"]  # the group's `resources` field sets Ray's CPUs
+
+
+def test_worker_has_spare_cpu_for_data_and_one_train_slot():
+    """Train takes cpus_per_worker; Ray Data needs a logical CPU too, or reading the datasets deadlocks."""
+    group = rayjob()["spec"]["rayClusterSpec"]["workerGroupSpecs"][0]
+    assert group["resources"] == {"CPU": "2", "modelport_train_slot": "1"}  # cpus_per_worker 1 + 1
 
 
 def test_runtime_env_has_pinned_pip_and_working_dir():

@@ -10,6 +10,12 @@ def local_ray(tmp_path_factory):
     with pytest.MonkeyPatch.context() as mp:
         mp.setenv("HOME", str(home))  # Ray must not create a token file in the real home
         mp.setenv("RAY_TRAIN_V2_ENABLED", "1")
-        ray.init(num_cpus=3, include_dashboard=False, configure_logging=False)
+        # like two worker pods: one Train slot each, plus a CPU left for Ray Data
+        ray.init(
+            num_cpus=3,
+            resources={"modelport_train_slot": 2},
+            include_dashboard=False,
+            configure_logging=False,
+        )
         yield ray
         ray.shutdown()

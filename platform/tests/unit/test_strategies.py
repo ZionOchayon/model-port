@@ -50,4 +50,4 @@ def test_scaling_config_from_spec():
     config = scaling_config(TABULAR)
     assert config.num_workers == 2
     assert config.use_gpu is False
-    assert config.resources_per_worker == {"CPU": 1.0}
+    assert config.resources_per_worker == {"CPU": 1.0, "modelport_train_slot": 1}  # one Train worker per pod

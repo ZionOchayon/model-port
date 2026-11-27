@@ -13,6 +13,7 @@ from modelport.spec import ModelSpec
 from modelport_platform.settings import PlatformSettings, Profile
 
 RAY_VERSION: Final = "2.60.1"
+TRAIN_SLOT: Final = "modelport_train_slot"  # custom Ray resource: one Train worker per worker pod
 RAY_POD_ENV: Final[list[dict[str, str]]] = [{"name": "RAY_TRAIN_V2_ENABLED", "value": "1"}]
 _PART_OF: Final = {"app.kubernetes.io/part-of": "modelport"}
 
@@ -98,11 +99,27 @@ def _cluster_spec(
     labels: dict[str, str],
     image: str,
     head: PodSizing,
-    group: str,
+    group_name: str,
     workers: int,
     worker_cpus: int,
     worker: PodSizing,
+    ray_resources: dict[str, str] | None = None,
 ) -> dict[str, Any]:
+    group: dict[str, Any] = {
+        "groupName": group_name,
+        "replicas": workers,
+        "minReplicas": workers,
+        "maxReplicas": workers,
+        "rayStartParams": {"metrics-export-port": "8080"},
+    }
+    if ray_resources is None:
+        group["rayStartParams"]["num-cpus"] = str(worker_cpus)
+    else:
+        group["resources"] = ray_resources  # KubeRay group field; overrides rayStartParams
+    group["template"] = {
+        "metadata": {"labels": labels},
+        "spec": {"containers": [_container("ray-worker", image, worker, WORKER_PORTS)]},
+    }
     return {
         "rayVersion": RAY_VERSION,
         "headGroupSpec": {
@@ -112,19 +129,7 @@ def _cluster_spec(
                 "spec": {"containers": [_container("ray-head", image, head, HEAD_PORTS)]},
             },
         },
-        "workerGroupSpecs": [
-            {
-                "groupName": group,
-                "replicas": workers,
-                "minReplicas": workers,
-                "maxReplicas": workers,
-                "rayStartParams": {"num-cpus": str(worker_cpus), "metrics-export-port": "8080"},
-                "template": {
-                    "metadata": {"labels": labels},
-                    "spec": {"containers": [_container("ray-worker", image, worker, WORKER_PORTS)]},
-                },
-            }
-        ],
+        "workerGroupSpecs": [group],
     }
 
 
@@ -179,10 +184,12 @@ def build_train_rayjob(
                 labels=labels,
                 image=settings.ray_image,
                 head=head_sizing(settings.profile),
-                group="workers",
+                group_name="workers",
                 workers=train.workers,
                 worker_cpus=math.ceil(train.cpus_per_worker),
                 worker=train_worker_sizing(spec, settings.profile),
+                # one logical CPU more than Train takes, so the Ray Data reads feeding it can run
+                ray_resources={"CPU": str(math.ceil(train.cpus_per_worker) + 1), TRAIN_SLOT: "1"},
             ),
         },
     }

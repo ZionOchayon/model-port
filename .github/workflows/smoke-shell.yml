@@ -46,7 +46,7 @@ jobs:
           $k describe pods -A > artifacts/describe-pods.txt 2>&1 || true
           $k get events -A --sort-by=.lastTimestamp > artifacts/events.txt 2>&1 || true
           sched=$($k get pod -n platform -l component=scheduler -o name | head -1)
-          $k cp "platform/${sched#pod/}:/opt/airflow/logs" artifacts/airflow-logs > /dev/null 2>&1 || true
+          $k exec -n platform "${sched#pod/}" -- tar czf - -C /opt/airflow logs > artifacts/airflow-logs.tgz 2>/dev/null || true  # names contain ":"
           cp /tmp/modelport-ui-*.log artifacts/ 2>/dev/null || true
       - uses: actions/upload-artifact@v7.0.2
         if: failure()

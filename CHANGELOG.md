@@ -32,6 +32,8 @@ All notable changes to this project are documented here. The format follows
   (retrain subscribed models on a new dataset version); `make ui`; CI DAG tests.
 - Ingest: quality checks against a dataset contract, immutable dataset versions (manifest written last)
   and quarantine with a report.
+- `modelport submit DIR [--spec FILE] [--dataset-version N] [--wait]`: validate, package and start training
+  through the Airflow REST API; resubmitting the same code reuses the existing run.
 - Evaluation gate rules: an absolute bar for a model's first version; otherwise the primary metric,
   every class's score and latency are checked against the champion, and every failed reason is reported.
 - Airflow DAG `train_model`: one RayJob per submission on its own Ray cluster, waited on with a
