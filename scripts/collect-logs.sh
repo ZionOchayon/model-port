@@ -22,6 +22,12 @@ run tar cf - -C /opt/airflow logs > artifacts/airflow-task-logs.tar 2> artifacts
 for p in $($k get pods -n ray -l ray.io/node-type=head -o name); do
   $k logs -n ray "$p" --all-containers > "artifacts/$(basename "$p").log" 2>&1
 done
+# Serve writes controller, proxy and replica logs to files inside the Ray pods, not to stdout
+for p in $($k get pods -n ray -l modelport.dev/kind=serve -o name); do
+  $k exec -n ray "${p#pod/}" -- tar cf - -C /tmp/ray/session_latest logs > "artifacts/$(basename "$p")-ray-logs.tar" 2>/dev/null
+done
+head=$($k get pods -n ray -l modelport.dev/kind=serve,ray.io/node-type=head -o name | head -1)
+[ -n "$head" ] && $k exec -n ray "${head#pod/}" -- serve status > artifacts/serve-status.txt 2>&1
 cp -r .data artifacts/data 2>/dev/null
 cp /tmp/modelport-ui-*.log artifacts/ 2>/dev/null
 exit 0

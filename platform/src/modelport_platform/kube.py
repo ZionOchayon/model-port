@@ -150,16 +150,25 @@ def rayjob_status(obj: Mapping[str, Any]) -> RayJobStatus:
 
 
 def rayservice_apps_ready(obj: Mapping[str, Any], expected_apps: Collection[str]) -> tuple[bool, str | None]:
-    """(ready, failure): ready once the current generation runs every app; a failure names DEPLOY_FAILED."""
+    """(ready, failure): ready once the current generation runs every app; a failure names DEPLOY_FAILED.
+
+    Readiness is `serviceStatus: Running` or (KubeRay 1.7, where serviceStatus may be absent) a `Ready`
+    condition. A DEPLOY_FAILED app is reported from the active status or, during a RayService's first
+    deployment, from the pending one.
+    """
     status = obj.get("status") or {}
     apps = (status.get("activeServiceStatus") or {}).get("applicationStatuses") or {}
+    pending = (status.get("pendingServiceStatus") or {}).get("applicationStatuses") or {}
     for name in expected_apps:
-        app = apps.get(name) or {}
-        if app.get("status") == "DEPLOY_FAILED":
-            return False, f"{name} DEPLOY_FAILED: {app.get('message', '')}"
+        for source in (apps, pending):
+            app = source.get(name) or {}
+            if app.get("status") == "DEPLOY_FAILED":
+                return False, f"{name} DEPLOY_FAILED: {app.get('message', '')}"
+    conditions = {c.get("type"): c.get("status") for c in status.get("conditions") or []}
+    serving = status.get("serviceStatus") == "Running" or conditions.get("Ready") == "True"
     ready = (
         status.get("observedGeneration") == (obj.get("metadata") or {}).get("generation")
-        and status.get("serviceStatus") == "Running"
+        and serving
         and all((apps.get(name) or {}).get("status") == "RUNNING" for name in expected_apps)
     )
     return ready, None

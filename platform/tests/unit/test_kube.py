@@ -156,3 +156,25 @@ def test_rayservice_deploy_failed_reported():
     ready, failure = rayservice_apps_ready(service(apps=apps), ["m", "m--candidate"])
     assert not ready
     assert failure == "m--candidate DEPLOY_FAILED: self-test failed"
+
+
+def test_rayservice_ready_from_ready_condition():
+    # KubeRay 1.7 reports readiness as a Ready condition; serviceStatus may be absent
+    apps = {"m": {"status": "RUNNING"}}
+    obj = service(service_status=None, apps=apps)
+    del obj["status"]["serviceStatus"]
+    assert rayservice_apps_ready(obj, ["m"]) == (False, None)
+    obj["status"]["conditions"] = [{"type": "Ready", "status": "True"}]
+    assert rayservice_apps_ready(obj, ["m"]) == (True, None)
+
+
+def test_rayservice_deploy_failed_in_pending_status_reported():
+    # the first deployment of a RayService reports its apps under pendingServiceStatus
+    obj = service(service_status=None, apps={})
+    obj["status"]["pendingServiceStatus"] = {
+        "applicationStatuses": {"m--candidate": {"status": "DEPLOY_FAILED", "message": "self-test failed"}}
+    }
+    assert rayservice_apps_ready(obj, ["m--candidate"]) == (
+        False,
+        "m--candidate DEPLOY_FAILED: self-test failed",
+    )
