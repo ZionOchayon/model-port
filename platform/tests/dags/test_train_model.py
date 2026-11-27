@@ -112,7 +112,7 @@ def test_rayjob_poke_states():
         "train-x",
     )
     assert done.is_done is True
-    assert done.xcom_value == {"startup_s": None, "duration_s": 300.0}
+    assert done.xcom_value == {"job_status": "SUCCEEDED", "startup_s": None, "duration_s": 300.0}
     with pytest.raises(AirflowFailException, match=r"kubectl -n ray logs job/train-x"):
         dagkit.rayjob_poke(Kube(rayjob("Failed", "FAILED", reason="AppFailed", message="exit 1")), "train-x")
     gone = dagkit.rayjob_poke(Kube(None), "train-x")  # deleted by its TTL: record_version decides

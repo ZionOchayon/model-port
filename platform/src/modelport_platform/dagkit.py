@@ -91,7 +91,9 @@ def rayjob_poke(k: KubeApi, name: str) -> "PokeReturnValue":
     obj = k.get(Plural.RAYJOBS, name)
     if obj is None:
         _log.warning("rayjob.missing", rayjob=name)
-        return PokeReturnValue(is_done=True, xcom_value={"startup_s": None, "duration_s": None})
+        return PokeReturnValue(
+            is_done=True, xcom_value={"job_status": None, "startup_s": None, "duration_s": None}
+        )
     status = rayjob_status(obj)
     if status.phase is RayJobPhase.FAILED:
         raise AirflowFailException(
@@ -101,5 +103,9 @@ def rayjob_poke(k: KubeApi, name: str) -> "PokeReturnValue":
         return PokeReturnValue(is_done=False)
     # shortcut: KubeRay's startTime is when initialising began, so startup (cluster ready) is not known
     # here; duration includes it. Measure startup from the job's own status when timing pushes need it.
-    timing = {"startup_s": None, "duration_s": _seconds(status.start_time, status.end_time)}
+    timing = {
+        "job_status": status.job_status,
+        "startup_s": None,
+        "duration_s": _seconds(status.start_time, status.end_time),
+    }
     return PokeReturnValue(is_done=True, xcom_value=timing)

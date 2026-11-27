@@ -139,3 +139,10 @@ def test_connection_error_platform_unavailable():
     s.routes[TOKEN] = requests.ConnectionError("refused")
     with pytest.raises(PlatformUnavailableError, match="make ui"):
         c.get_run("train_model", "submit__m__abc")
+
+
+def test_xcom_value_and_missing():
+    path = RUN + "/taskInstances/wait_rayjob/xcomEntries/return_value?deserialize=true&stringify=false"
+    c, _ = client({("GET", path): [Response(200, {"value": {"job_status": "SUCCEEDED"}}), Response(404)]})
+    assert c.xcom("train_model", "submit__m__abc", "wait_rayjob") == {"job_status": "SUCCEEDED"}
+    assert c.xcom("train_model", "submit__m__abc", "wait_rayjob") is None

@@ -65,6 +65,9 @@ class Orchestrator(Protocol):
     def get_run(self, dag_id: str, run_id: str) -> DagRunInfo | None:
         """The run, or None when it does not exist (yet)."""
 
+    def xcom(self, dag_id: str, run_id: str, task_id: str, key: str = "return_value") -> Any:  # noqa: ANN401
+        """A task's XCom value as JSON, or None when the task pushed none."""
+
     def task_states(self, dag_id: str, run_id: str) -> list[TaskState]:
         """Every task instance of the run."""
 
@@ -190,6 +193,15 @@ class AirflowClient:
             conf=body.get("conf") or {},
             url=self._url(dag_id, run_id),
         )
+
+    def xcom(self, dag_id: str, run_id: str, task_id: str, key: str = "return_value") -> Any:  # noqa: ANN401
+        """A task's XCom value as JSON, or None when the task pushed none."""
+        path = f"/api/v2/dags/{dag_id}/dagRuns/{run_id}/taskInstances/{task_id}/xcomEntries/{key}"
+        response = self._request("GET", f"{path}?deserialize=true&stringify=false")
+        if response.status_code == 404:
+            return None
+        self._check(response, f"Reading XCom {task_id} of {run_id}")
+        return response.json().get("value")
 
     def task_states(self, dag_id: str, run_id: str) -> list[TaskState]:
         """Every task instance of the run."""
