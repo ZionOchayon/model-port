@@ -1,0 +1,35 @@
+# EuroSAT land-use classifier (Sentinel-2 RGB, 64x64). The full-profile example.
+schema_version: 1
+name: image-classifier
+class: model:ImageClassifier
+framework: torch
+labels:
+  [AnnualCrop, Forest, HerbaceousVegetation, Highway, Industrial, Pasture, PermanentCrop, Residential, River, SeaLake]
+signature:
+  inputs:
+    - { name: image, type: binary }
+runtime:
+  pip: [torch==2.15.0, torchvision==0.29.2, pillow==13.0.0]
+resources:
+  train: { workers: 2, cpus_per_worker: 1, memory_per_worker: 2Gi }
+  serve: { replicas: 1, cpus: 0.5, memory: 1Gi }
+train:
+  epochs: 5
+  batch_size: 64
+  learning_rate: 0.001
+  params: { image_size: 64, in_channels: 3 }
+evaluation:
+  metric: f1_macro
+  min_improvement: 0.0
+  max_drop_per_class: 0.05
+  min_absolute: 0.60
+serving:
+  canary_weight: 0.1
+  observation_window_minutes: 10
+  latency_p95_ms: 500
+drift:
+  psi_warning: 0.1
+  psi_critical: 0.25
+data:
+  dataset: s3://datasets/eurosat
+  label_column: label

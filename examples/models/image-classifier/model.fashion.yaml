@@ -1,0 +1,36 @@
+# Fashion-MNIST variant used in CI (smoke profile): small, fast, and with CI tolerances (see README).
+schema_version: 1
+name: fashion-classifier
+class: model:ImageClassifier
+framework: torch
+labels: [T-shirt/top, Trouser, Pullover, Dress, Coat, Sandal, Shirt, Sneaker, Bag, Ankle boot]
+signature:
+  inputs:
+    - { name: image, type: binary }
+runtime:
+  pip: [torch==2.15.0, torchvision==0.29.2, pillow==13.0.0]
+resources:
+  train: { workers: 2, cpus_per_worker: 1, memory_per_worker: 2Gi }
+  serve: { replicas: 1, cpus: 0.5, memory: 1Gi }
+train:
+  epochs: 2
+  batch_size: 128
+  learning_rate: 0.001
+  params: { image_size: 32, in_channels: 1 }
+evaluation:
+  metric: f1_macro
+  min_improvement: -0.02
+  max_drop_per_class: 0.10
+  max_latency_increase: 0.5
+  min_absolute: 0.6
+serving:
+  canary_weight: 0.1
+  observation_window_minutes: 2
+  min_canary_requests: 30
+  latency_p95_ms: 500
+drift:
+  psi_warning: 0.1
+  psi_critical: 0.25
+data:
+  dataset: s3://datasets/fashion-mnist
+  label_column: label

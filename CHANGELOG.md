@@ -26,6 +26,7 @@ All notable changes to this project are documented here. The format follows
   client settings and structured logging.
 - `modelport validate DIR`: twelve ordered checks with a fix for each failure, no cluster needed; global
   `--json`, `--debug` and `--version`.
+- Example model 1: an image classifier (ResNet-18, PyTorch DDP) with EuroSAT and Fashion-MNIST spec files.
 - Training helpers for `train_loop`: `modelport.report()` (per-epoch metrics and checkpoint, rank 0 only)
   and `modelport.latest_artifacts()` (resume).
 - MLflow pyfunc adapter: a trained model is logged once (code, weights, spec, signature) and loaded the

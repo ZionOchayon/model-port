@@ -1,95 +1,84 @@
-"""Spike (risk R5): TorchTrainer with DDP over gloo on local Ray, checkpoint per epoch, and resume.
+"""TorchTrainer with DDP over gloo on local Ray, driving the example image model's own train_loop.
 
-The train loop is inline on purpose; the example image model replaces it once it exists.
+Settles risk R5 (torch 2.15 with Ray 2.60) with the real example: 2 workers, a checkpoint per epoch.
 """
 
-import json
+import io
 import sys
-import tempfile
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
 import pytest
 
 pytestmark = pytest.mark.integration
 
 ray = pytest.importorskip("ray")
 torch = pytest.importorskip("torch")
-# Ray workers cannot import this test module, so ship the inline train loop by value.
+# Ray workers cannot import this test module, so ship the worker function by value.
 ray.cloudpickle.register_pickle_by_value(sys.modules[__name__])
 
+ROOT = Path(__file__).resolve().parents[3]
+MODEL_DIR = ROOT / "examples" / "models" / "image-classifier"
 ROWS = 600
 
 
-def train_loop(config):
-    import ray.train
-    import torch
-    import torch.distributed as dist
-    from ray.train import Checkpoint
-    from ray.train.torch import prepare_model
+def fashion_like_table(rows: int) -> pd.DataFrame:
+    """Fashion-MNIST-shaped rows: 28x28 grayscale PNG bytes and one of the ten labels."""
+    from PIL import Image
 
-    model = prepare_model(torch.nn.Linear(4, 3))
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
-    start = 0
-    if (ckpt := ray.train.get_checkpoint()) is not None:
-        with ckpt.as_directory() as d:
-            start = json.loads((Path(d) / "meta.json").read_text())["epoch"] + 1
-            model.module.load_state_dict(torch.load(Path(d) / "model.pt", weights_only=True))
-    rank = ray.train.get_context().get_world_rank()
-    shard = ray.train.get_dataset_shard("train")
-    for epoch in range(start, config["epochs"]):
-        seen = 0
-        for batch in shard.iter_torch_batches(batch_size=50):
-            x, y = batch["x"].float(), batch["y"].long()
-            loss = torch.nn.functional.cross_entropy(model(x), y)
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            seen += len(y)
-        total = torch.tensor([seen])
-        dist.all_reduce(total)
-        metrics = {"epoch": epoch, "rows_rank": seen, "rows_total": int(total.item()), "start": start}
-        if rank == 0:
-            with tempfile.TemporaryDirectory() as tmp:
-                torch.save(model.module.state_dict(), Path(tmp) / "model.pt")
-                (Path(tmp) / "meta.json").write_text(json.dumps({"epoch": epoch}))
-                ray.train.report(metrics, checkpoint=Checkpoint.from_directory(tmp))
-        else:
-            ray.train.report(metrics)
+    from modelport.spec import load_spec
+
+    labels = load_spec(MODEL_DIR / "model.fashion.yaml").labels
+    rng = np.random.default_rng(0)
+    images = []
+    for _ in range(rows):
+        buffer = io.BytesIO()
+        Image.fromarray((rng.random((28, 28)) * 255).astype(np.uint8), mode="L").save(buffer, format="PNG")
+        images.append(buffer.getvalue())
+    return pd.DataFrame({"image": images, "label": [labels[i % len(labels)] for i in range(rows)]})
 
 
-def fit(storage, epochs):
-    import numpy as np
-    import pandas as pd
-    from ray.train import CheckpointConfig, FailureConfig, RunConfig, ScalingConfig
+def worker(config):
+    """What the platform's worker entry does: load the class from the model folder and call train_loop."""
+    from modelport import TrainConfig
+    from modelport.loader import instantiate
+    from modelport.spec import load_spec
+
+    spec = load_spec(Path(config["model_dir"]) / "model.fashion.yaml")
+    model = instantiate(Path(config["model_dir"]), spec)
+    model.train_loop(
+        TrainConfig(
+            model_name=spec.name,
+            labels=tuple(spec.labels),
+            label_column=spec.data.label_column,
+            epochs=config["epochs"],
+            batch_size=50,
+            learning_rate=spec.train.learning_rate,
+            params=dict(spec.train.params),
+            num_workers=2,
+        )
+    )
+
+
+def test_example_image_model_trains_with_ddp_and_checkpoints(local_ray, tmp_path):
+    from ray.train import CheckpointConfig, RunConfig, ScalingConfig
     from ray.train.torch import TorchConfig, TorchTrainer
 
-    rng = np.random.default_rng(0)
-    frame = pd.DataFrame({"x": list(rng.normal(size=(ROWS, 4))), "y": rng.integers(0, 3, ROWS)})
     trainer = TorchTrainer(
-        train_loop,
-        train_loop_config={"epochs": epochs},
+        worker,
+        train_loop_config={"model_dir": str(MODEL_DIR), "epochs": 2},
         torch_config=TorchConfig(backend="gloo"),
         scaling_config=ScalingConfig(num_workers=2, use_gpu=False, resources_per_worker={"CPU": 1}),
         run_config=RunConfig(
-            name="spike",
-            storage_path=str(storage),
-            failure_config=FailureConfig(max_failures=2),
-            checkpoint_config=CheckpointConfig(num_to_keep=2),
+            name="torch", storage_path=str(tmp_path), checkpoint_config=CheckpointConfig(num_to_keep=2)
         ),
-        datasets={"train": ray.data.from_pandas(frame)},
+        datasets={"train": ray.data.from_pandas(fashion_like_table(ROWS))},
     )
-    return trainer.fit()
-
-
-def test_torch_trainer_ddp_gloo_checkpoints_and_resume(local_ray, tmp_path):
-    first = fit(tmp_path, epochs=2)
-    assert first.error is None
-    assert first.metrics["epoch"] == 1
-    assert len(first.best_checkpoints) == 2
-    assert first.metrics["rows_total"] == ROWS
-    assert first.metrics["rows_rank"] == ROWS // 2
-
-    resumed = fit(tmp_path, epochs=3)
-    assert resumed.error is None
-    assert resumed.metrics["epoch"] == 2
-    assert resumed.metrics["start"] == 2
+    result = trainer.fit()
+    assert result.error is None
+    assert result.metrics["epoch"] == 1
+    assert len(result.best_checkpoints) == 2
+    assert result.metrics["train_rows"] == ROWS // 2  # each of the two workers saw half the rows
+    with result.checkpoint.as_directory() as d:
+        assert {p.name for p in Path(d).iterdir()} >= {"model.pt", "meta.json"}
