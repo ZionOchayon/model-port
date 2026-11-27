@@ -1,6 +1,6 @@
 """TorchTrainer with DDP over gloo on local Ray, driving the example image model's own train_loop.
 
-Settles risk R5 (torch 2.15 with Ray 2.60) with the real example: 2 workers, a checkpoint per epoch.
+Checks torch 2.15 with Ray 2.60 on the real example: 2 workers, a checkpoint per epoch.
 """
 
 import io

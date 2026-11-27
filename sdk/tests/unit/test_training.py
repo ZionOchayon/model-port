@@ -1,3 +1,5 @@
+from collections import OrderedDict
+
 import pytest
 
 from modelport import training
@@ -96,3 +98,36 @@ def test_latest_artifacts_none_without_checkpoint(monkeypatch):
 def test_xgboost_callback_checkpoints_every_round():
     callback = training.xgboost_callback()
     assert callback._frequency == 1
+
+
+class FakeBooster:
+    def save_model(self, path):
+        with open(path, "w") as f:
+            f.write("model")
+
+    def num_boosted_rounds(self):
+        return 3
+
+
+def test_xgboost_callback_logs_checkpoint_evidence_on_rank0(fake_train, monkeypatch):
+    calls, _ = fake_train
+    registry = FakeRegistry()
+    monkeypatch.setenv("MODELPORT_MLFLOW_RUN_ID", "run-1")
+    monkeypatch.setattr(training, "_metrics_sink", lambda: registry)
+    callback = training.xgboost_callback()
+    log = OrderedDict(train=OrderedDict(mlogloss=[0.9, 0.8, 0.7]))  # xgboost passes OrderedDicts
+    callback.after_iteration(FakeBooster(), 2, log)
+    assert calls["report"][0][1] is not None  # Ray Train got the checkpoint
+    assert registry.logged == [("run-1", {"epoch": 2.0, "train-mlogloss": 0.7, "checkpoint_saved": 1.0}, 2)]
+
+
+def test_xgboost_callback_other_ranks_do_not_log(fake_train, monkeypatch):
+    _, state = fake_train
+    state["rank"] = 1
+    registry = FakeRegistry()
+    monkeypatch.setenv("MODELPORT_MLFLOW_RUN_ID", "run-1")
+    monkeypatch.setattr(training, "_metrics_sink", lambda: registry)
+    training.xgboost_callback().after_iteration(
+        FakeBooster(), 0, OrderedDict(train=OrderedDict(mlogloss=[0.9]))
+    )
+    assert registry.logged == []

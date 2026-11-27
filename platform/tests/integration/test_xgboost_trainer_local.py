@@ -1,6 +1,6 @@
 """Ray Train V2 XGBoostTrainer on local Ray, driving the example Covertype model's own train_loop.
 
-Settles risk R4 (xgboost 3.4 with Ray 2.60): 2 workers, a checkpoint every boosting round, and resume.
+Checks xgboost 3.4 with Ray 2.60: 2 workers, a checkpoint every boosting round, and resume.
 """
 
 import sys
