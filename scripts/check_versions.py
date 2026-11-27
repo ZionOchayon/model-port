@@ -31,7 +31,7 @@ FILE_PINS: tuple[tuple[str, str, str], ...] = (
     (
         "RAY_VERSION",
         "platform/src/modelport_platform/ray/manifests.py",
-        r'rayVersion["\']?\s*[:=]\s*"([^"]+)"',
+        r'^RAY_VERSION: Final = "([^"]+)"',
     ),
     ("RAY_VERSION", "deploy/manifests/base/shared-raycluster.yaml", r'rayVersion:\s*"([^"]+)"'),
     ("RAY_VERSION", "platform/pyproject.toml", r'"ray\[[a-z,]+\]==([^"]+)"'),

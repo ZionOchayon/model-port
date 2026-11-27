@@ -6,3 +6,4 @@ resources:
   - minio.yaml
   - buckets-job.yaml
   - mlflow.yaml
+  - airflow-rbac.yaml

@@ -1,0 +1,22 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: { name: modelport-airflow, namespace: ray }
+rules:
+  - apiGroups: [ray.io]
+    resources: [rayjobs, rayservices]
+    verbs: [get, list, watch, create, patch, update, delete]
+  - apiGroups: [ray.io]
+    resources: [rayclusters]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [pods, pods/log]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: { name: modelport-airflow, namespace: ray }
+roleRef:
+  { apiGroup: rbac.authorization.k8s.io, kind: Role, name: modelport-airflow }
+subjects:
+  - { kind: ServiceAccount, name: airflow-scheduler, namespace: platform }
+  - { kind: ServiceAccount, name: airflow-triggerer, namespace: platform }
