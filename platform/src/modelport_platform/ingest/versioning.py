@@ -73,6 +73,11 @@ def _versions(store: DatasetStore, dataset: str) -> list[DatasetVersion]:
     return sorted(found, key=lambda v: v.version)
 
 
+def version_by_number(store: DatasetStore, dataset: str, version: int) -> DatasetVersion | None:
+    """A committed version by its number, if it exists."""
+    return next((v for v in _versions(store, dataset) if v.version == version), None)
+
+
 def find_version_by_sha(store: DatasetStore, dataset: str, sha256: str) -> DatasetVersion | None:
     """The version made from a file with this sha256, if any."""
     return next((v for v in _versions(store, dataset) if v.sha256 == sha256), None)

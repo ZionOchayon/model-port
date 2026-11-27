@@ -321,6 +321,34 @@ class MlflowRegistry:
         """`models:/<name>/<version>`."""
         return f"models:/{name}/{version}"
 
+    def ensure_run(
+        self, experiment: str, run_name: str, key_tag: Tag, tags: Mapping[str, str], params: Mapping[str, Any]
+    ) -> str:
+        """Find the run tagged `key_tag` = `tags[key_tag]` or create it; then set tags and params."""
+        exp = self._call(lambda: self.client.get_experiment_by_name(experiment))
+        experiment_id = (
+            str(exp.experiment_id)
+            if exp
+            else str(self._call(lambda: self.client.create_experiment(experiment)))
+        )
+        query = f"tags.`{key_tag}` = {_quoted(tags[key_tag])}"
+        found = self._call(lambda: self.client.search_runs([experiment_id], query, max_results=1))
+        if found:
+            run_id = str(found[0].info.run_id)
+        else:
+            run_id = str(
+                self._call(lambda: self.client.create_run(experiment_id, run_name=run_name)).info.run_id
+            )
+        for key, value in tags.items():
+            self._call(partial(self.client.set_tag, run_id, key, value))
+        for key, value in params.items():
+            try:
+                self._call(partial(self.client.log_param, run_id, key, value))
+            except MlflowException as err:  # params are immutable: a resumed run keeps its first values
+                if _code(err) != "INVALID_PARAMETER_VALUE":
+                    raise
+        return run_id
+
     def log_metrics(self, run_id: str, metrics: Mapping[str, float], step: int) -> None:
         """Log metrics to a run at one step (used by `modelport.report` on rank 0)."""
         for key, value in metrics.items():

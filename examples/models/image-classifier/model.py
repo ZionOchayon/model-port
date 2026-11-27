@@ -79,7 +79,8 @@ class ImageClassifier(BaseModel):
                 optimizer.step()
                 losses.append(loss.item())
                 rows += len(y)
-            metrics = {"epoch": epoch, "loss": float(np.mean(losses)) if losses else 0.0, "train_rows": rows}
+            loss_mean = float(np.mean(losses)) if losses else 0.0
+            metrics = {"epoch": epoch, "loss": loss_mean, "train_rows": rows, "resumed_from": start}
             if modelport.training.world_rank() == 0:
                 with tempfile.TemporaryDirectory() as tmp:
                     torch.save(self.net.state_dict(), Path(tmp) / "model.pt")

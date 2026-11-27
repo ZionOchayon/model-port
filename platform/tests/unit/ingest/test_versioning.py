@@ -11,6 +11,7 @@ from modelport_platform.ingest.versioning import (
     load_contract,
     quarantine,
     split_train_val,
+    version_by_number,
     write_version,
 )
 
@@ -59,6 +60,8 @@ def test_next_version_increments(store):
     write(store, table())
     v2 = write(store, table(120), sha=SHA_B)
     assert v2.version == 2
+    assert version_by_number(store, DS, 1).version == 1
+    assert version_by_number(store, DS, 3) is None
     assert latest_version(store, DS).version == 2
 
 

@@ -150,3 +150,16 @@ def test_find_version_by_tag_and_list_models(registry):
     ]
     assert registry.list_models() == ["covertype-classifier", "frozen-model", "image-classifier"]
     assert registry.model_uri("image-classifier", v1) == f"models:/image-classifier/{v1}"
+
+
+def test_ensure_run_finds_by_key_tag_and_keeps_first_params(registry):
+    tags = {Tag.TRAIN_RAYJOB: "train-m-1", Tag.MODEL: "m"}
+    first = registry.ensure_run("modelport-train/m", "train-m-1", Tag.TRAIN_RAYJOB, tags, {"epochs": 2})
+    again = registry.ensure_run("modelport-train/m", "train-m-1", Tag.TRAIN_RAYJOB, tags, {"epochs": 3})
+    other = registry.ensure_run(
+        "modelport-train/m", "train-m-2", Tag.TRAIN_RAYJOB, {**tags, Tag.TRAIN_RAYJOB: "train-m-2"}, {}
+    )
+    assert first == again != other
+    run = registry.client.get_run(first)
+    assert run.data.params == {"epochs": "2"}
+    assert run.data.tags[Tag.MODEL] == "m"

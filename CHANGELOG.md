@@ -32,6 +32,8 @@ All notable changes to this project are documented here. The format follows
   (retrain subscribed models on a new dataset version); `make ui`; CI DAG tests.
 - Ingest: quality checks against a dataset contract, immutable dataset versions (manifest written last)
   and quarantine with a report.
+- Training on Ray Train: the RayJob entrypoint, Torch (DDP over gloo) and XGBoost strategies,
+  dataset splits read with Ray Data, and resume from the last checkpoint when a RayJob is rerun.
 - Platform settings from the environment, the platform ports, and the S3 (MinIO) adapter; a test keeps the
   pure core free of I/O libraries.
 - `examples/datasets/prepare.py`: downloads Fashion-MNIST, EuroSAT or Covertype, converts them to the
