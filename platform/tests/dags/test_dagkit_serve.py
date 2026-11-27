@@ -135,3 +135,18 @@ def test_ready_poke():
     failed = {**running, "m--champion": {"status": "DEPLOY_FAILED", "message": "self-test failed"}}
     with pytest.raises(AirflowFailException, match="m--champion DEPLOY_FAILED"):
         dagkit.rayservice_ready_poke(FakeKube(status(failed)), apps, name="modelport-serve")
+
+
+def test_ready_poke_tolerates_the_candidate_failing():
+    apps = ["m", "m--champion", "m--candidate"]
+    running = {a: {"status": "RUNNING"} for a in apps}
+    failed = {**running, "m--candidate": {"status": "DEPLOY_FAILED", "message": "self-test failed"}}
+    result = dagkit.rayservice_ready_poke(
+        FakeKube(status(failed)), apps, name="modelport-serve", tolerate=["m--candidate"]
+    )
+    assert result.is_done
+    assert result.xcom_value["deploy_failed"].startswith("m--candidate DEPLOY_FAILED")
+    ok = dagkit.rayservice_ready_poke(
+        FakeKube(status(running)), apps, name="modelport-serve", tolerate=["m--candidate"]
+    )
+    assert ok.xcom_value == {"deploy_failed": None}

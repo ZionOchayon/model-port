@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Airflow DAG `deploy_candidate`: a version that passed the gate is served beside the champion with a share
+  of traffic (all of it for a model's first version), judged on live errors and latency, then promoted
+  with zero downtime or rolled back and rejected with its reasons. A load generator sends the canary's
+  traffic from validation rows, and a Serve client covers the HTTP contract.
 - Canary judge: the candidate's live error rate and p95 latency, read from Prometheus over the observation
   window, against its limits and the champion's; every failed rule is reported.
 - Prometheus on every profile (kube-prometheus-stack; Grafana and Alertmanager on the full profile only),

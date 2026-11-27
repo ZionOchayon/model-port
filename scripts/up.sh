@@ -79,6 +79,7 @@ MODELPORT_SHARED_RAY_ADDRESS=http://modelport-shared-head-svc.ray.svc.cluster.lo
 MODELPORT_RAYSERVICE_NAME=modelport-serve
 MODELPORT_SERVE_URL=http://modelport-serve-serve-svc.ray.svc.cluster.local:8000
 MODELPORT_CANARY_SYNTHETIC_TRAFFIC=true
+MODELPORT_PROMETHEUS_URL=http://kps-prometheus.monitoring.svc.cluster.local:9090
 MODELPORT_DATASETS=fashion-mnist,eurosat,covertype
 ENV
 for ns in platform ray; do

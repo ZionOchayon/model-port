@@ -158,10 +158,8 @@ def decide_version(
 
 
 def should_deploy(result: Mapping[str, Any]) -> bool:
-    """Deploy a passed version unless serving.auto_deploy is off (or deploy_candidate is not installed)."""
-    if not (result["passed"] and result["auto_deploy"]):
-        return False
-    return Path(__file__).with_name("deploy_candidate.py").exists()
+    """Deploy a passed version unless serving.auto_deploy is off."""
+    return bool(result["passed"] and result["auto_deploy"])
 
 
 @dag(

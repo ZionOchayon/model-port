@@ -165,11 +165,16 @@ def apply_serve_state(reg: ServeRegistry, k: KubeApi, s: PlatformSettings) -> li
     return apps
 
 
-def rayservice_ready_poke(k: KubeApi, apps: Collection[str], *, name: str | None = None) -> "PokeReturnValue":
+def rayservice_ready_poke(
+    k: KubeApi, apps: Collection[str], *, name: str | None = None, tolerate: Collection[str] = ()
+) -> "PokeReturnValue":
     """Sensor poke: done when the RayService runs every app of its current generation.
 
+    A DEPLOY_FAILED app listed in `tolerate` ends the wait with XCom `{"deploy_failed": <message>}` (the
+    canary's candidate: an outcome to roll back, not a failure).
+
     Raises:
-        AirflowFailException: an expected app is DEPLOY_FAILED (fail fast instead of waiting it out).
+        AirflowFailException: any other expected app is DEPLOY_FAILED (fail fast instead of waiting it out).
     """
     from airflow.sdk import PokeReturnValue
     from airflow.sdk.exceptions import AirflowFailException
@@ -179,5 +184,7 @@ def rayservice_ready_poke(k: KubeApi, apps: Collection[str], *, name: str | None
         return PokeReturnValue(is_done=False)
     ready, failure = rayservice_apps_ready(obj, apps)
     if failure is not None:
+        if any(failure.startswith(f"{app} ") for app in tolerate):
+            return PokeReturnValue(is_done=True, xcom_value={"deploy_failed": failure})
         raise AirflowFailException(failure)
-    return PokeReturnValue(is_done=ready)
+    return PokeReturnValue(is_done=ready, xcom_value={"deploy_failed": None} if ready else None)

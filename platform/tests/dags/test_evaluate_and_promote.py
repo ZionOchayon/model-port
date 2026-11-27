@@ -159,8 +159,7 @@ def test_first_model_absolute_bar():
 def test_no_auto_deploy_short_circuits():
     assert dag_module.should_deploy({"passed": True, "auto_deploy": False}) is False
     assert dag_module.should_deploy({"passed": False, "auto_deploy": True}) is False
-    expected = (Path(dag_module.__file__).with_name("deploy_candidate.py")).exists()
-    assert dag_module.should_deploy({"passed": True, "auto_deploy": True}) is expected
+    assert dag_module.should_deploy({"passed": True, "auto_deploy": True}) is True
 
 
 def test_structure():
