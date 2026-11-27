@@ -20,10 +20,12 @@ import typer
 from modelport import __version__
 from modelport.cli import render
 from modelport.clients.airflow import AirflowClient, Orchestrator
+from modelport.clients.serve import ServeClient
 from modelport.config import ClientSettings
 from modelport.errors import (
     ContractError,
     ModelportError,
+    NotFoundError,
     PromotionRefusedError,
     RemoteOperationError,
     SignatureMismatchError,
@@ -32,6 +34,7 @@ from modelport.errors import (
 from modelport.lifecycle import ModelState
 from modelport.logs import configure_logging
 from modelport.naming import (
+    Alias,
     Tag,
     deploy_run_id,
     evaluate_run_id,
@@ -42,7 +45,8 @@ from modelport.naming import (
 )
 from modelport.packaging import build_code_zip
 from modelport.registry import ArtifactStore, MlflowRegistry, ModelRegistry
-from modelport.spec import spec_sha256
+from modelport.serving import MAX_INSTANCES, encode_rows, read_input_file
+from modelport.spec import load_spec, spec_sha256
 from modelport.validate import validate_model_dir
 
 app = typer.Typer(
@@ -85,6 +89,7 @@ class Services:
     store: ArtifactStore
     orchestrator: Orchestrator
     settings: ClientSettings
+    serve: Any = None  # ServeClient; built on first use by `predict`
 
 
 def build_services() -> Services:
@@ -97,7 +102,10 @@ def build_services() -> Services:
         settings.airflow_password,
         timeout_s=settings.http_timeout_s,
     )
-    return Services(registry=registry, store=registry, orchestrator=orchestrator, settings=settings)
+    serve = ServeClient(settings.serve_url, timeout_s=settings.http_timeout_s)
+    return Services(
+        registry=registry, store=registry, orchestrator=orchestrator, settings=settings, serve=serve
+    )
 
 
 TRAIN_DAG: Final = "train_model"
@@ -521,3 +529,54 @@ def rollback(
 ) -> None:
     """Make the previous champion the champion again and update serving."""
     _serve_command(ctx, name, "rollback", None, wait, timeout, yes)
+
+
+def predict_rows(services: Services, name: str, path: Path, rows: int | None) -> dict[str, Any]:
+    """Send a file's rows to the model's endpoint.
+
+    Raises:
+        NotFoundError: the model has no champion (nothing is served).
+        SignatureMismatchError: the file does not fit the champion's signature.
+    """
+    champion = services.registry.resolve(name, Alias.CHAMPION)
+    if champion is None:
+        raise NotFoundError(
+            what=f"{name} has no champion, so nothing serves it yet",
+            fix=f"`modelport status {name}` shows where its newest version is.",
+        )
+    with tempfile.TemporaryDirectory() as tmp:
+        spec = load_spec(
+            services.store.download(champion.tags[Tag.TRAIN_RUN_ID], "spec/model.yaml", Path(tmp))
+        )
+    frame = read_input_file(path, spec.signature.inputs)
+    if rows is not None:
+        frame = frame.head(rows)
+    response = services.serve.predict(name, encode_rows(frame, spec.signature.inputs))
+    return response.model_dump()  # type: ignore[no-any-return]
+
+
+@app.command()
+def predict(
+    ctx: typer.Context,
+    name: NameArgument,
+    file: Annotated[
+        Path,
+        typer.Argument(
+            metavar="FILE", help="A .json, .csv or .parquet file, or one image.", show_default=False
+        ),
+    ],
+    rows: Annotated[
+        int | None,
+        typer.Option("--rows", metavar="N", min=1, max=MAX_INSTANCES, help="Send only the first N rows."),
+    ] = None,
+) -> None:
+    """Send FILE to the model's endpoint and print one prediction per row."""
+    with handled(ctx) as options:
+        result = predict_rows(build_services(), name, file, rows)
+        if options.as_json:
+            render.emit_json(result)
+            return
+        typer.echo(f"{name} v{result['version']} ({result['variant']})")
+        typer.echo(f"  {'row':>4}  {'prediction':<24}confidence")
+        for i, item in enumerate(result["predictions"]):
+            typer.echo(f"  {i:>4}  {item['prediction']:<24}{item['confidence']:.3f}")

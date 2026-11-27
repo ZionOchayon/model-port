@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `modelport predict NAME FILE [--rows N]`: sends rows from a JSON, CSV, Parquet or image file to the
+  model's champion and prints each prediction with the version and variant that answered. Two models are
+  served side by side, each in its own runtime environment (check V-09).
 - `modelport promote NAME VERSION` and `modelport rollback NAME` (with `--wait`, `--yes`): the Airflow DAG
   `serve_sync` stages the target beside the champion, moves the traffic, then the aliases, with the same
   zero-downtime swap as a canary; refused during a canary, for a version that did not pass the gate, or
@@ -30,6 +33,11 @@ All notable changes to this project are documented here. The format follows
   input files as JSON, CSV, Parquet or one image), and a Ray Serve application per model version that
   refuses to start when the version fails its signature self-test, answers bad input with 422, exports
   model metrics and logs sampled requests to `s3://inference-logs/` for drift.
+
+### Fixed
+
+- Smoke profile: a model's retraining no longer waits forever for memory while a model is served. The
+  memory requests of Ray heads (1 GiB) and the Serve worker (1.5 GiB) are lower; their limits are unchanged.
 
 ## [0.1.0] - 2026-11-27
 

@@ -8,6 +8,7 @@ from typer.testing import CliRunner
 from modelport.cli import main
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "broken_models"
+ROOT = Path(__file__).resolve().parents[3]
 runner = CliRunner()
 
 
@@ -357,3 +358,65 @@ def test_rollback_triggers_serve_sync(services):
     assert (dag_id, conf) == ("serve_sync", {"model": "tiny-model", "action": "rollback", "version": None})
     assert run_id.startswith("rollback__tiny-model__")
     assert "v1" in result.output
+
+
+class FakeServe:
+    def __init__(self, error=None):
+        self.error, self.calls = error, []
+
+    def predict(self, model, request):
+        from modelport.serving import PredictionItem, PredictResponse
+
+        self.calls.append((model, len(request.instances)))
+        if self.error:
+            raise self.error
+        items = [PredictionItem(prediction="Aspen", confidence=0.87)] * len(request.instances)
+        return PredictResponse(model=model, version="2", variant="champion", predictions=items)
+
+
+def champion_with_spec(registry):
+    from modelport.naming import Alias, Tag
+
+    spec = (ROOT / "examples" / "models" / "covertype-classifier" / "model.yaml").read_bytes()
+    registry.runs["train-1"] = {"tags": {}, "artifacts": {"spec/model.yaml": spec}}
+    registry.add_version("covertype-classifier", {Tag.TRAIN_RUN_ID: "train-1"}, "train-1")
+    registry.aliases["covertype-classifier"][Alias.CHAMPION] = "1"
+
+
+def with_serve(monkeypatch, services, serve):
+    from dataclasses import replace
+
+    svc = replace(services, serve=serve)
+    monkeypatch.setattr(main, "build_services", lambda: svc)
+    return serve
+
+
+def test_predict_prints_table(services, monkeypatch):
+    champion_with_spec(services.registry)
+    serve = with_serve(monkeypatch, services, FakeServe())
+    example = ROOT / "examples" / "models" / "covertype-classifier" / "example" / "input.parquet"
+    result = run("predict", "covertype-classifier", str(example), "--rows", "3")
+    assert result.exit_code == 0, result.output
+    assert serve.calls == [("covertype-classifier", 3)]
+    assert "Aspen" in result.output
+    assert "0.870" in result.output
+    assert "v2 (champion)" in result.output
+
+
+def test_predict_platform_down_exit_6_mentions_make_ui(services, monkeypatch):
+    from modelport.errors import PlatformUnavailableError
+
+    champion_with_spec(services.registry)
+    down = PlatformUnavailableError(what="Cannot reach Serve", fix="Run `make ui`.")
+    with_serve(monkeypatch, services, FakeServe(down))
+    example = ROOT / "examples" / "models" / "covertype-classifier" / "example" / "input.parquet"
+    result = run("predict", "covertype-classifier", str(example))
+    assert result.exit_code == 6
+    assert "make ui" in result.output
+
+
+def test_predict_without_champion_exit_7(services):
+    services.registry.ensure_registered_model("covertype-classifier", {})
+    result = run("predict", "covertype-classifier", "rows.json")
+    assert result.exit_code == 7
+    assert "no champion" in result.output

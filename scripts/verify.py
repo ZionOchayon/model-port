@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
 import sys
 import tempfile
 import time
@@ -16,7 +17,7 @@ import zipfile
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -137,6 +138,16 @@ def folder_files(folder: Path) -> set[str]:
         p.relative_to(folder).as_posix()
         for p in folder.rglob("*")
         if p.is_file() and "__pycache__" not in p.parts and not p.name.endswith(".pyc")
+    }
+
+
+def pip_by_app(serve_config: str) -> dict[str, tuple[str, ...]]:
+    """Each Serve app's `runtime_env.pip` packages, from the RayService's `serveConfigV2` YAML."""
+    import yaml
+
+    apps = yaml.safe_load(serve_config).get("applications") or []
+    return {
+        a["name"]: tuple(((a.get("runtime_env") or {}).get("pip") or {}).get("packages") or ()) for a in apps
     }
 
 
@@ -310,6 +321,43 @@ def v08(ctx: Context) -> None:
     require(run and run.state == "success", f"retrain run is {run.state if run else 'absent'}")
 
 
+SERVED_MODELS: Final = ("fashion-classifier", "covertype-classifier")
+
+
+def v09(ctx: Context) -> None:
+    """Both example models answer `modelport predict`, each app with its own runtime_env.pip."""
+    for model in SERVED_MODELS:
+        folder, _ = model_folder(model)
+        example = folder / "example" / "input.parquet"
+        out = subprocess.run(  # noqa: S603 - fixed command
+            ["uv", "run", "modelport", "--json", "predict", model, str(example)],  # noqa: S607
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=ROOT,
+        )
+        require(
+            out.returncode == 0, f"modelport predict {model} exited {out.returncode}: {out.stdout[-300:]}"
+        )
+        answer = json.loads(out.stdout)
+        import pandas as pd
+
+        rows = len(pd.read_parquet(example))
+        require(
+            len(answer["predictions"]) == rows,
+            f"{model}: {len(answer['predictions'])} predictions for {rows} rows",
+        )
+    config = _kubectl(
+        "get", "rayservice", "-n", "ray", "modelport-serve", "-o", "jsonpath={.spec.serveConfigV2}"
+    )
+    pips = pip_by_app(config)
+    champions = [pips.get(f"{m}--champion") for m in SERVED_MODELS]
+    require(
+        all(p is not None for p in champions), f"champion apps missing from the RayService: {sorted(pips)}"
+    )
+    require(champions[0] != champions[1], f"both champion apps have runtime_env.pip {champions[0]}")
+
+
 DRILL_KILL_WORKER = ROOT / ".data" / "drill-kill-worker.json"
 
 
@@ -342,6 +390,7 @@ def v05d(ctx: Context) -> None:
 
 
 CHECKS: dict[str, Callable[[Context], None]] = {
+    "V-09": v09,
     "V-01": v01,
     "V-02": v02,
     "V-04": v04,

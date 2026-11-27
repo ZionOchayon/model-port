@@ -95,3 +95,19 @@ def test_resume_evidence():
         "no epoch resumed from a checkpoint (resumed_from stayed 0)"
     ]
     assert verify.resume_problems([0, 1], epochs=4, resumed_from=[0, 1]) == ["epoch steps [2, 3] missing"]
+
+
+def test_pip_by_app():
+    config = """
+applications:
+  - {name: fashion-classifier, route_prefix: /fashion-classifier}
+  - name: fashion-classifier--champion
+    runtime_env: {env_vars: {A: b}}
+  - name: covertype-classifier--champion
+    runtime_env: {pip: {packages: [xgboost==3.4.1], pip_check: false}}
+"""
+    assert verify.pip_by_app(config) == {
+        "fashion-classifier": (),
+        "fashion-classifier--champion": (),
+        "covertype-classifier--champion": ("xgboost==3.4.1",),
+    }
