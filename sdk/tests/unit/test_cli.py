@@ -420,3 +420,17 @@ def test_predict_without_champion_exit_7(services):
     result = run("predict", "covertype-classifier", "rows.json")
     assert result.exit_code == 7
     assert "no champion" in result.output
+
+
+def test_predict_too_many_rows_exit_4_suggests_rows(services, monkeypatch, tmp_path):
+    import pandas as pd
+
+    champion_with_spec(services.registry)
+    serve = with_serve(monkeypatch, services, FakeServe())
+    example = pd.read_parquet(ROOT / "examples/models/covertype-classifier/example/input.parquet")
+    big = tmp_path / "big.parquet"
+    pd.concat([example] * (1025 // len(example) + 1)).head(1025).to_parquet(big)
+    result = run("predict", "covertype-classifier", str(big))
+    assert result.exit_code == 4, result.output
+    assert "--rows" in result.output
+    assert serve.calls == []

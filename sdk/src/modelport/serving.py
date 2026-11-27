@@ -127,8 +127,13 @@ def encode_rows(frame: pd.DataFrame, spec_inputs: Sequence[ColumnSpec]) -> Predi
     """The request for these rows (binary columns as base64).
 
     Raises:
-        SignatureMismatchError: a signature column is missing.
+        SignatureMismatchError: a signature column is missing, or there are more than MAX_INSTANCES rows.
     """
+    if len(frame) > MAX_INSTANCES:
+        raise SignatureMismatchError(
+            what=f"{len(frame)} rows is more than one request takes ({MAX_INSTANCES})",
+            fix=f"Send at most {MAX_INSTANCES} rows, for example with `--rows {MAX_INSTANCES}`.",
+        )
     selected = _select(frame, spec_inputs)
     kinds = {c.name: c.type for c in spec_inputs}
     rows = [{k: _json_value(v, kinds[str(k)]) for k, v in r.items()} for r in selected.to_dict("records")]
