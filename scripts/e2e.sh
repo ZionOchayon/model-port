@@ -45,6 +45,11 @@ if [[ $STAGE != v0.1 ]]; then
   group mp submit "$TAB" --wait --timeout 3600
   group ops wait-alias covertype-classifier champion --timeout 2400
   group ops wait-dag-run deploy_candidate deploy__covertype-classifier__v1 --timeout 1800
+  # the new dataset can also start a retrain (v2) when the ingest event lands just after submit registered
+  # the model; canaries never overlap, so its deploy, if any, must end before the drills start theirs
+  group ops wait-dag-run train_model retrain__covertype-classifier__covertype__v1 --if-exists --timeout 2400
+  group ops wait-dag-run evaluate_and_promote evaluate__covertype-classifier__v2 --if-exists --timeout 1800
+  group ops wait-dag-run deploy_candidate deploy__covertype-classifier__v2 --if-exists --timeout 2400
   group make ui # the Serve Service exists only once a model is served
   group mp predict fashion-classifier "$IMG/example/input.parquet"
   group mp predict covertype-classifier "$TAB/example/input.parquet"

@@ -31,6 +31,11 @@ All notable changes to this project are documented here. The format follows
 - A Pushgateway in `monitoring` (`make up`), so job timings, gate and canary results and aliases reach
   Prometheus, and ServiceMonitors for MLflow, Airflow's statsd-exporter and MinIO (FR-14).
 
+### Fixed
+
+- No request fails when a canary starts while the candidate's deployment is not available yet: the
+  router sends its share to the champion, as it does before Serve has built the candidate app.
+
 ## [0.2.0] - 2026-11-28
 
 ### Added

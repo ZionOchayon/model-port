@@ -195,3 +195,22 @@ def test_candidate_app_not_built_yet_goes_to_champion(monkeypatch):
     handles["m--candidate"] = Handle("candidate")  # Serve built the app: the next request reaches it
     status, body = call(deployment, request())
     assert (status, body["variant"]) == (200, "candidate")
+
+
+def test_candidate_deployment_unavailable_goes_to_champion(monkeypatch):
+    from ray.serve._private.common import DeploymentID
+    from ray.serve.exceptions import DeploymentUnavailableError
+
+    champion = Handle("champion")
+    unavailable = DeploymentUnavailableError(DeploymentID(name="ModelDeployment", app_name="m--candidate"))
+    candidate = Handle("candidate", error=unavailable)  # the app exists, its replicas are not up yet
+    deployment, _ = make(
+        monkeypatch, {"m--champion": champion, "m--candidate": candidate}, candidate_weight=1.0
+    )
+    status, body = call(deployment, request())
+    assert (status, body["variant"]) == (200, "champion")
+    outcomes = [args for name, args, _ in Recorder.instances[0].calls if name == "request"]
+    assert outcomes == [("champion", "ok")]
+    deployment.reconfigure({**CONFIG, "candidate_app": None, "champion_app": "m--champion"})
+    champion.error = unavailable  # an unavailable champion is still an error
+    assert call(deployment, request())[0] == 500

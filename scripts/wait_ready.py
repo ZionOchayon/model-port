@@ -86,8 +86,10 @@ def airflow_problems() -> list[str]:
     base = ("exec", "-n", "platform", "deploy/airflow-scheduler", "-c", "scheduler", "--", "airflow", "dags")
     listed = run(*base, "list", "-o", "json")
     errors = run(*base, "list-import-errors", "-o", "json")
-    if listed.returncode != 0 or errors.returncode != 0:
-        return ["Airflow CLI not answering in the scheduler pod"]
+    failed = next((out for out in (listed, errors) if out.returncode != 0), None)
+    if failed is not None:
+        tail = " ".join(failed.stderr.strip().splitlines()[-2:]) or "no stderr"
+        return [f"Airflow CLI not answering in the scheduler pod (exit {failed.returncode}: {tail})"]
     return dag_problems(json.loads(listed.stdout or "[]"), json.loads(errors.stdout or "[]"), expected_dags())
 
 

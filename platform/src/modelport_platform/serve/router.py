@@ -1,8 +1,8 @@
 """One HTTP entry point per model (`/<model>/predict`) that splits traffic between champion and candidate.
 
 The split is a weighted coin per request. There is no fallback from a failing candidate to the champion:
-the canary must see the candidate's errors to reject it. Only a candidate app that Serve has not built yet
-(no handle) sends the request to the champion.
+the canary must see the candidate's errors to reject it. Only a candidate that cannot take requests yet (Serve
+has not built its app, or its deployment is not available) sends the request to the champion.
 """
 
 import json
@@ -11,7 +11,7 @@ import time
 from typing import Any, Literal
 
 from ray import serve
-from ray.serve.exceptions import RayServeException
+from ray.serve.exceptions import DeploymentUnavailableError, RayServeException
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -140,7 +140,14 @@ class ModelRouter:
             return JSONResponse({"error": f"request body is not JSON: {err.msg}"}, status_code=422)
         try:
             variant, handle = self._route(variant)
-            result: dict[str, Any] = await handle.predict.remote(body)
+            try:
+                result: dict[str, Any] = await handle.predict.remote(body)
+            except DeploymentUnavailableError:
+                if variant == "champion" or self.champion_app is None:
+                    raise
+                _log.info("router.candidate_not_ready", model=self.model, candidate_app=self.candidate_app)
+                variant = "champion"
+                result = await self._handle(self.champion_app).predict.remote(body)
         except Exception as err:  # no fallback: the canary must see the candidate's errors
             self.metrics.request(variant, "error")
             _log.warning("router.variant_failed", model=self.model, variant=variant, error=type(err).__name__)
