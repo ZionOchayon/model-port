@@ -47,5 +47,9 @@ lint: ## ruff check + format check
 typecheck: ## mypy --strict
 	@uv run mypy
 
+# promtool runs natively when on PATH (always inside the toolbox, ADR-0019), else from the pinned image.
+PROMTOOL := $(shell command -v promtool >/dev/null 2>&1 && echo promtool || echo 'docker run --rm -v "$(CURDIR)/deploy/monitoring:/w" -w /w --entrypoint promtool $(PROMETHEUS_IMAGE)')
+
 rules-test: ## promtool unit tests for the PrometheusRule
-	@echo "make rules-test: not implemented yet"; exit 1
+	@uv run python scripts/extract_rules.py deploy/monitoring/prometheus-rules.yaml deploy/monitoring/.rules.generated.yaml
+	@cd deploy/monitoring && $(PROMTOOL) test rules rules-tests.yaml

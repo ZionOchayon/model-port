@@ -1,0 +1,179 @@
+# promtool unit tests for prometheus-rules.yaml (`make rules-test`). The runbook_url strings must match the
+# rules exactly.
+rule_files:
+  - .rules.generated.yaml
+evaluation_interval: 1m
+
+tests:
+  # PSI: warning for one feature, critical (batch) for another; nothing for a stable one.
+  - interval: 1m
+    input_series:
+      - series: 'modelport_psi{job="modelport_drift",model="m",feature="stat_a"}'
+        values: "0.15x20"
+      - series: 'modelport_psi{job="modelport_drift",model="m",feature="stat_b"}'
+        values: "0.30x20"
+      - series: 'modelport_psi{job="modelport_drift",model="m",feature="stat_c"}'
+        values: "0.02x20"
+      - series: 'modelport_psi_threshold{job="modelport_drift",model="m",level="warning"}'
+        values: "0.1x20"
+      - series: 'modelport_psi_threshold{job="modelport_drift",model="m",level="critical"}'
+        values: "0.25x20"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: ModelDriftWarning
+        exp_alerts:
+          - exp_labels: { severity: warning, model: m, feature: stat_a }
+            exp_annotations:
+              summary: "PSI warning for m on feature stat_a"
+              runbook_url: "https://github.com/ZionOchayon/model-port/blob/main/docs/runbook.md#modeldriftwarning"
+      - eval_time: 2m
+        alertname: ModelDriftCritical
+        exp_alerts:
+          - exp_labels:
+              { severity: critical, layer: batch, model: m, feature: stat_b }
+            exp_annotations:
+              summary: "PSI critical for m on feature stat_b"
+              runbook_url: "https://github.com/ZionOchayon/model-port/blob/main/docs/runbook.md#modeldriftcritical"
+
+  # Live drift: confidence mean 0.5 vs baseline 0.9 (drop 0.4 > 0.15), 1 prediction/s.
+  - interval: 1m
+    input_series:
+      - series: 'ray_modelport_prediction_confidence_count{application="m--champion",deployment="ModelDeployment",replica="r1",model="m",version="1"}'
+        values: "0+60x40"
+      - series: 'ray_modelport_prediction_confidence_sum{application="m--champion",deployment="ModelDeployment",replica="r1",model="m",version="1"}'
+        values: "0+30x40"
+      - series: 'ray_modelport_baseline_confidence_mean{application="m--champion",deployment="ModelDeployment",replica="r1",model="m",version="1"}'
+        values: "0.9x40"
+      - series: 'ray_modelport_live_drift_threshold{application="m--champion",deployment="ModelDeployment",replica="r1",model="m",kind="confidence_drop"}'
+        values: "0.15x40"
+      - series: 'ray_modelport_live_drift_threshold{application="m--champion",deployment="ModelDeployment",replica="r1",model="m",kind="class_share_increase"}'
+        values: "0.3x40"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ModelDriftCritical
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: ModelDriftCritical
+        exp_alerts:
+          - exp_labels: { severity: critical, layer: live, model: m }
+            exp_annotations:
+              summary: "Live prediction distribution of m moved away from its baseline for 15 minutes"
+              runbook_url: "https://github.com/ZionOchayon/model-port/blob/main/docs/runbook.md#modeldriftcritical"
+
+  # Live drift does not fire on a healthy model (mean 0.88 vs baseline 0.9).
+  - interval: 1m
+    input_series:
+      - series: 'ray_modelport_prediction_confidence_count{application="m--champion",model="m",version="1"}'
+        values: "0+60x40"
+      - series: 'ray_modelport_prediction_confidence_sum{application="m--champion",model="m",version="1"}'
+        values: "0+52.8x40"
+      - series: 'ray_modelport_baseline_confidence_mean{application="m--champion",model="m",version="1"}'
+        values: "0.9x40"
+      - series: 'ray_modelport_live_drift_threshold{application="m--champion",model="m",kind="confidence_drop"}'
+        values: "0.15x40"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: ModelDriftCritical
+        exp_alerts: []
+
+  # 5xx ratio 10% for more than 5 minutes; a 1% service does not fire.
+  - interval: 1m
+    input_series:
+      - series: 'ray_serve_num_http_requests_total{application="m",route="/m",method="POST",status_code="200"}'
+        values: "0+600x20"
+      - series: 'ray_serve_num_http_error_requests_total{application="m",route="/m",method="POST",error_code="500"}'
+        values: "0+60x20"
+      - series: 'ray_serve_num_http_requests_total{application="ok",route="/ok",method="POST",status_code="200"}'
+        values: "0+600x20"
+      - series: 'ray_serve_num_http_error_requests_total{application="ok",route="/ok",method="POST",error_code="500"}'
+        values: "0+6x20"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: ServeErrorRate
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: ServeErrorRate
+        exp_alerts:
+          - exp_labels: { severity: critical, application: m }
+            exp_annotations:
+              summary: "More than 2% of requests to m return 5xx"
+              runbook_url: "https://github.com/ZionOchayon/model-port/blob/main/docs/runbook.md#serveerrorrate"
+
+  # p95 about 955 ms against a 500 ms threshold, for more than 10 minutes.
+  - interval: 1m
+    input_series:
+      - series: 'ray_serve_http_request_latency_ms_bucket{application="m",route="/m",method="POST",status_code="200",le="100"}'
+        values: "0+0x25"
+      - series: 'ray_serve_http_request_latency_ms_bucket{application="m",route="/m",method="POST",status_code="200",le="1000"}'
+        values: "0+60x25"
+      - series: 'ray_serve_http_request_latency_ms_bucket{application="m",route="/m",method="POST",status_code="200",le="+Inf"}'
+        values: "0+60x25"
+      - series: 'ray_modelport_latency_threshold_ms{application="m",deployment="ModelRouter",replica="r0",model="m"}'
+        values: "500x25"
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: ServeLatencyP95
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: ServeLatencyP95
+        exp_alerts:
+          - exp_labels: { severity: warning, application: m }
+            exp_annotations:
+              summary: "p95 latency of m is above its model.yaml threshold"
+              runbook_url: "https://github.com/ZionOchayon/model-port/blob/main/docs/runbook.md#servelatencyp95"
+
+  # Canary failed one minute in; a passed canary does not fire.
+  - interval: 1m
+    input_series:
+      - series: 'modelport_canary_last_result{job="modelport_lifecycle",model="m",source="canary"}'
+        values: "0x10"
+      - series: 'modelport_canary_last_result_timestamp_seconds{job="modelport_lifecycle",model="m",source="canary"}'
+        values: "60x10"
+      - series: 'modelport_canary_last_result{job="modelport_lifecycle",model="ok",source="canary"}'
+        values: "1x10"
+      - series: 'modelport_canary_last_result_timestamp_seconds{job="modelport_lifecycle",model="ok",source="canary"}'
+        values: "60x10"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: CanaryFailed
+        exp_alerts:
+          - exp_labels: { severity: warning, model: m }
+            exp_annotations:
+              summary: "Canary of m failed and was rolled back"
+              runbook_url: "https://github.com/ZionOchayon/model-port/blob/main/docs/runbook.md#canaryfailed"
+
+  # One failed DAG run.
+  - interval: 1m
+    input_series:
+      - series: 'airflow_dagrun_failed_count{dag_id="train_model"}'
+        values: "0 0 1 1 1 1 1 1 1 1 1"
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: DagFailed
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: DagFailed
+        exp_alerts:
+          - exp_labels: { severity: warning, dag_id: train_model }
+            exp_annotations:
+              summary: "DAG train_model failed after all retries"
+              runbook_url: "https://github.com/ZionOchayon/model-port/blob/main/docs/runbook.md#dagfailed"
+
+  # A RayJob pending for 12 minutes fires; a running one does not.
+  - interval: 1m
+    input_series:
+      - series: 'kuberay_job_deployment_status{name="train-m-1",namespace="ray",uid="u1",deployment_status="Initializing"}'
+        values: "1x15"
+      - series: 'kuberay_job_deployment_status{name="train-m-2",namespace="ray",uid="u2",deployment_status="Running"}'
+        values: "1x15"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: RayJobStuck
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: RayJobStuck
+        exp_alerts:
+          - exp_labels: { severity: warning, name: train-m-1, namespace: ray }
+            exp_annotations:
+              summary: "RayJob ray/train-m-1 has been pending for more than 10 minutes"
+              runbook_url: "https://github.com/ZionOchayon/model-port/blob/main/docs/runbook.md#rayjobstuck"

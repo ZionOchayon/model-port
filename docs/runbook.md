@@ -92,3 +92,40 @@ Exit 8 with the reason. `a canary is running for <model>`: wait for its `deploy_
 ## A batch day has no predictions
 
 See [components/batch.md](components/batch.md#when-something-goes-wrong): the model had no champion or no input under `s3://batch-input/<dataset>/<day>/`, or its job failed and the `run_batch` task log has the job's log tail.
+
+## Alerts
+
+Every alert links here by its name. Thresholds come from each model's `model.yaml` (`drift`, `serving`), except where a fixed value is given.
+
+## `ModelDriftWarning`
+
+The daily `drift_check` found a feature whose PSI against the champion's training baseline is at least `drift.psi_warning` (0.1 by default) and below `drift.psi_critical`. The live data is moving; nothing is broken. Look at the model's PSI per feature in Grafana (Models dashboard) and at recent input. If it keeps growing, retrain on newer data (a new dataset version retrains subscribed models). Drift never retrains a model by itself.
+
+## `ModelDriftCritical`
+
+Two ways to fire, told apart by the `layer` label:
+
+- `layer="batch"`: a feature's PSI is at least `drift.psi_critical` (0.25 by default) in the daily check.
+- `layer="live"`: for 15 minutes, with at least 100 predictions an hour, the champion's mean confidence over the last hour dropped more than `drift.live_confidence_drop` below its baseline, or a class's share grew more than `drift.live_class_share_increase`.
+
+The model is seeing data unlike its training data, and its predictions may be wrong. Check the input source for a change (a new upstream, a broken preprocessing step), then retrain on data that includes the new distribution, or roll back with `modelport rollback NAME` if a recent promotion caused it. `simulate_drift` fires this alert on purpose.
+
+## `ServeErrorRate`
+
+More than 2% of the requests to a Serve app returned 5xx for 5 minutes. `kubectl --context kind-modelport -n ray get rayservice modelport-serve -o yaml` shows each app's status; the Ray dashboard (`make ui`, `localhost:8265`) has the replica logs, where each failure is logged as `router.variant_failed`. During a canary, the canary rolls a failing candidate back by itself; for the champion, roll back with `modelport rollback NAME`.
+
+## `ServeLatencyP95`
+
+The p95 latency of a Serve app has been above its model's `serving.latency_p95_ms` for 10 minutes. Usually the replicas are short of CPU: check node and pod CPU in Grafana, raise `resources.serve.replicas` or `resources.serve.cpus` in `model.yaml`, or lower the traffic.
+
+## `CanaryFailed`
+
+A candidate was rolled back in the last hour: the canary is working, and the champion kept serving. See [A canary was rolled back](#a-canary-was-rolled-back) for the reasons. The alert clears an hour after the canary's verdict.
+
+## `DagFailed`
+
+An Airflow DAG run failed after all its retries in the last 10 minutes. Open the run in Airflow (`make ui`, `localhost:8080`): the failed task's log has the error. A refusal (`AirflowFailException`, for example a promotion during a canary) is a deliberate failure with its reason in the log.
+
+## `RayJobStuck`
+
+A RayJob has been `Initializing` or `Waiting` for more than 10 minutes, almost always because its pods cannot be scheduled. See [Pods stay `Pending`](#pods-stay-pending) and [A RayJob is stuck or failed](#a-rayjob-is-stuck-or-failed).

@@ -39,3 +39,119 @@ spec:
         - record: modelport:serve_latency_p95_ms:5m
           expr: |
             histogram_quantile(0.95, sum by (application, le) (rate(ray_serve_http_request_latency_ms_bucket[5m])))
+
+    - name: modelport.alerts
+      interval: 1m
+      rules:
+        - alert: ModelDriftWarning
+          expr: |
+            (
+              max by (model, feature) (modelport_psi)
+                >= on (model) group_left
+              max by (model) (modelport_psi_threshold{level="warning"})
+            )
+            and on (model, feature)
+            (
+              max by (model, feature) (modelport_psi)
+                < on (model) group_left
+              max by (model) (modelport_psi_threshold{level="critical"})
+            )
+          for: 0m
+          labels:
+            severity: warning
+          annotations:
+            summary: "PSI warning for {{ $labels.model }} on feature {{ $labels.feature }}"
+            runbook_url: "https://github.com/ZionOchayon/model-port/blob/main/docs/runbook.md#modeldriftwarning"
+
+        - alert: ModelDriftCritical
+          expr: |
+            max by (model, feature) (modelport_psi)
+              >= on (model) group_left
+            max by (model) (modelport_psi_threshold{level="critical"})
+          for: 0m
+          labels:
+            severity: critical
+            layer: batch
+          annotations:
+            summary: "PSI critical for {{ $labels.model }} on feature {{ $labels.feature }}"
+            runbook_url: "https://github.com/ZionOchayon/model-port/blob/main/docs/runbook.md#modeldriftcritical"
+
+        - alert: ModelDriftCritical
+          # `and` binds tighter than `or` in PromQL, so the two branches are grouped first.
+          expr: |
+            (
+              (
+                (modelport:baseline_confidence_mean - modelport:confidence_mean:1h)
+                  > on (model)
+                max by (model) (modelport:live_drift_threshold{kind="confidence_drop"})
+              )
+              or on (model)
+              (
+                max by (model) (
+                  (modelport:class_share:1h - on (model, predicted_class) modelport:baseline_class_share)
+                    > on (model) group_left
+                  max by (model) (modelport:live_drift_threshold{kind="class_share_increase"})
+                )
+              )
+            )
+            and on (model)
+            (modelport:prediction_rate:1h * 3600 >= 100)
+          for: 15m
+          labels:
+            severity: critical
+            layer: live
+          annotations:
+            summary: "Live prediction distribution of {{ $labels.model }} moved away from its baseline for 15 minutes"
+            runbook_url: "https://github.com/ZionOchayon/model-port/blob/main/docs/runbook.md#modeldriftcritical"
+
+        - alert: ServeErrorRate
+          expr: modelport:serve_error_ratio:5m > 0.02
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "More than 2% of requests to {{ $labels.application }} return 5xx"
+            runbook_url: "https://github.com/ZionOchayon/model-port/blob/main/docs/runbook.md#serveerrorrate"
+
+        - alert: ServeLatencyP95
+          expr: |
+            modelport:serve_latency_p95_ms:5m
+              > on (application) group_left
+            max by (application) (ray_modelport_latency_threshold_ms)
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "p95 latency of {{ $labels.application }} is above its model.yaml threshold"
+            runbook_url: "https://github.com/ZionOchayon/model-port/blob/main/docs/runbook.md#servelatencyp95"
+
+        - alert: CanaryFailed
+          expr: |
+            (max by (model) (modelport_canary_last_result) == 0)
+            and on (model)
+            (time() - max by (model) (modelport_canary_last_result_timestamp_seconds) < 3600)
+          for: 0m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Canary of {{ $labels.model }} failed and was rolled back"
+            runbook_url: "https://github.com/ZionOchayon/model-port/blob/main/docs/runbook.md#canaryfailed"
+
+        - alert: DagFailed
+          expr: sum by (dag_id) (increase(airflow_dagrun_failed_count[10m])) > 0
+          for: 0m
+          labels:
+            severity: warning
+          annotations:
+            summary: "DAG {{ $labels.dag_id }} failed after all retries"
+            runbook_url: "https://github.com/ZionOchayon/model-port/blob/main/docs/runbook.md#dagfailed"
+
+        - alert: RayJobStuck
+          expr: |
+            max by (name, namespace) (kuberay_job_deployment_status{deployment_status=~"Initializing|Waiting"}) == 1
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "RayJob {{ $labels.namespace }}/{{ $labels.name }} has been pending for more than 10 minutes"
+            runbook_url: "https://github.com/ZionOchayon/model-port/blob/main/docs/runbook.md#rayjobstuck"

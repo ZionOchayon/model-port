@@ -43,3 +43,33 @@ def test_repo_rules_have_the_recording_group():
     records = {r["record"] for r in groups["modelport.recording"]["rules"]}
     wanted = {"modelport:confidence_mean:1h", "modelport:class_share:1h", "modelport:serve_error_ratio:5m"}
     assert wanted <= records
+
+
+def test_runbook_anchors():
+    assert extract_rules.anchors("# Runbook\n\n## `ModelDriftWarning`\n\n## Pods stay `Pending`\n") == {
+        "runbook",
+        "modeldriftwarning",
+        "pods-stay-pending",
+    }
+    groups = [
+        {"name": "a", "rules": [{"record": "x", "expr": "1"}]},
+        {
+            "name": "b",
+            "rules": [
+                {"alert": "A", "expr": "1", "annotations": {"runbook_url": "https://h/docs/runbook.md#a"}},
+                {"alert": "B", "expr": "1", "annotations": {"runbook_url": "https://h/docs/runbook.md#gone"}},
+                {"alert": "C", "expr": "1"},
+            ],
+        },
+    ]
+    assert extract_rules.runbook_problems(groups, {"a"}) == [
+        "alert B: runbook anchor #gone not in docs/runbook.md",
+        "alert C: no runbook_url",
+    ]
+
+
+def test_repo_alerts_have_runbook_anchors():
+    text = (ROOT / "deploy/monitoring/prometheus-rules.yaml").read_text(encoding="utf-8")
+    runbook = (ROOT / "docs/runbook.md").read_text(encoding="utf-8")
+    groups = yaml.safe_load(text)["spec"]["groups"]
+    assert extract_rules.runbook_problems(groups, extract_rules.anchors(runbook)) == []

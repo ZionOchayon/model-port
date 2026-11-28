@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Alert rules (FR-17): `ModelDriftWarning`, `ModelDriftCritical` (daily PSI, or the live prediction
+  distribution for 15 minutes), `ServeErrorRate`, `ServeLatencyP95`, `CanaryFailed`, `DagFailed` and
+  `RayJobStuck`, each with a runbook section; `make rules-test` runs their promtool unit tests, and
+  `scripts/extract_rules.py` refuses an alert whose runbook anchor does not exist.
 - Prometheus recording rules (`deploy/monitoring/prometheus-rules.yaml`): each champion's live confidence
   mean, prediction rate and class shares next to its baseline, and each Serve app's error ratio and p95
   latency; `scripts/extract_rules.py` and a `promtool check rules` step in CI (FR-16, FR-17).
