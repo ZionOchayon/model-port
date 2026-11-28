@@ -13,14 +13,14 @@ Everything runs on one kind cluster named `modelport`, in three namespaces: `pla
 | 3 Images       | `scripts/images.sh` builds `modelport/ray`, `modelport/airflow` and `modelport/minio`, tagged with the commit, and loads them into kind. Digest-pinned upstream images (PostgreSQL, MLflow) are re-tagged locally, because kind cannot load an image by digest. |
 | 4 Namespaces   | `deploy/manifests/base/namespaces.yaml`.                                                                                                                                                                                                                        |
 | 5 Secrets      | `scripts/secrets.sh` (below).                                                                                                                                                                                                                                   |
-| 6 Monitoring | kube-prometheus-stack (`deploy/helm/kube-prometheus-stack.values.yaml`, plus `kube-prometheus-stack.smoke.values.yaml` on smoke: Prometheus and the exporters only). Its CRDs come first, so KubeRay can create its ServiceMonitor. |
+| 6 Monitoring | kube-prometheus-stack (`deploy/helm/kube-prometheus-stack.values.yaml`, plus `kube-prometheus-stack.smoke.values.yaml` on smoke: Prometheus and the exporters only). Its CRDs come first, so KubeRay can create its ServiceMonitor. Then the Pushgateway (`deploy/helm/pushgateway.values.yaml`), where Airflow tasks push job timings, gate and canary results and aliases. |
 | 7 KubeRay      | The KubeRay operator chart with `deploy/helm/kuberay-operator.values.yaml`.                                                                                                                                                                                     |
 | 8 Platform env | ConfigMap `modelport-platform-env` in `platform` and `ray`: service addresses, the Ray image, the profile and `MODELPORT_DATASETS`.                                                                                                                             |
 | 9 Manifests    | `kubectl kustomize deploy/manifests/overlays/<profile>` with the image references filled in.                                                                                                                                                                    |
 | 10 Storage     | Waits for PostgreSQL, MinIO, MLflow and the bucket Job.                                                                                                                                                                                                         |
 | 11 Airflow     | The Apache Airflow chart with `deploy/helm/airflow.values.yaml` (plus `airflow.smoke.values.yaml` on smoke).                                                                                                                                                    |
 | 12 Pools       | Airflow pools `ray_training` and `shared_cluster` (1 slot on smoke, 2 on full) and `serve_config` (1).                                                                                                                                                          |
-| 13 Monitoring objects | `kubectl apply -k deploy/monitoring`: the PodMonitors that scrape every Ray head and worker in `ray`. |
+| 13 Monitoring objects | `kubectl apply -k deploy/monitoring`: the PodMonitors that scrape every Ray head and worker in `ray`, and the ServiceMonitors for MLflow, Airflow's statsd-exporter and MinIO. |
 | 14 Wait        | `scripts/wait_ready.py`: every pod Ready, the KubeRay CRDs present, `modelport-shared` ready, MLflow healthy, every DAG loaded with no import errors. Gives up after `UP_TIMEOUT` seconds (default 1500, exit 124).                                             |
 | 15 Credentials | Writes `.modelport/credentials.env` (mode 600): the Airflow password for the CLI, and the S3 keys for platform tooling.                                                                                                                                         |
 
@@ -157,3 +157,14 @@ Added on the smoke profile (CI): Prometheus and the exporters only.
 | `alertmanager.enabled`, `grafana.enabled` | `false`: CI checks metrics in Prometheus; nothing reads alerts or dashboards there. |
 | `prometheus.prometheusSpec.retention`, `prometheus.prometheusSpec.retentionSize` | 1 day and 512 MB: a CI run lasts under two hours. |
 | `prometheus.prometheusSpec.resources` | 384 Mi requested, 1 Gi limit. |
+
+### `deploy/helm/pushgateway.values.yaml`
+
+prometheus-pushgateway chart 3.11.2, release `pushgateway` in `monitoring`. Every key is commented in the file. Airflow tasks push to `http://pushgateway.monitoring.svc.cluster.local:9091` (`MODELPORT_PUSHGATEWAY_URL` in the platform env); a failed push is logged and never fails a task.
+
+## Monitoring objects (`deploy/monitoring/`)
+
+| File | Objects |
+| --- | --- |
+| `deploy/monitoring/podmonitors.yaml` | PodMonitors `ray-head` and `ray-workers`: every Ray pod in `ray` on its `metrics` port every 15 s, labelled with its cluster (`ray_io_cluster`) and kind (`modelport_kind`). |
+| `deploy/monitoring/servicemonitors.yaml` | ServiceMonitors `mlflow` (`/metrics`, from `--expose-prometheus`), `airflow-statsd` (the Airflow chart's statsd-exporter, port `statsd-scrape`) and `minio` (`/minio/v2/metrics/cluster`, public on this development stack). The `pushgateway` ServiceMonitor comes from its chart, with `honorLabels` so pushed labels are kept. |

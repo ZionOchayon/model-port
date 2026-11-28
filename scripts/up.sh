@@ -59,6 +59,8 @@ kps_values=(-f deploy/helm/kube-prometheus-stack.values.yaml)
 [[ $PROFILE == smoke ]] && kps_values+=(-f deploy/helm/kube-prometheus-stack.smoke.values.yaml)
 helm --kube-context kind-modelport upgrade --install kps prometheus-community/kube-prometheus-stack \
   --version "$KPS_CHART_VERSION" -n monitoring "${kps_values[@]}" --wait --timeout 10m > /dev/null
+helm --kube-context kind-modelport upgrade --install pushgateway prometheus-community/prometheus-pushgateway \
+  --version "$PUSHGATEWAY_CHART_VERSION" -n monitoring -f deploy/helm/pushgateway.values.yaml --wait > /dev/null
 
 step "7 KubeRay"
 helm --kube-context kind-modelport upgrade --install kuberay-operator kuberay/kuberay-operator --version "$KUBERAY_VERSION" \
@@ -80,6 +82,7 @@ MODELPORT_RAYSERVICE_NAME=modelport-serve
 MODELPORT_SERVE_URL=http://modelport-serve-serve-svc.ray.svc.cluster.local:8000
 MODELPORT_CANARY_SYNTHETIC_TRAFFIC=true
 MODELPORT_PROMETHEUS_URL=http://kps-prometheus.monitoring.svc.cluster.local:9090
+MODELPORT_PUSHGATEWAY_URL=http://pushgateway.monitoring.svc.cluster.local:9091
 MODELPORT_DATASETS=fashion-mnist,eurosat,covertype
 ENV
 for ns in platform ray; do

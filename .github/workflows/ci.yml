@@ -167,6 +167,9 @@ jobs:
       - name: Up (FR-1)
         run: make up PROFILE=smoke
 
+      - name: ServiceMonitors (FR-14)
+        run: kubectl --context kind-modelport get servicemonitor -n monitoring pushgateway airflow-statsd mlflow minio
+
       - name: Save MinIO image for the cache
         if: steps.minio-cache.outputs.cache-hit != 'true'
         run: |

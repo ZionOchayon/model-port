@@ -1,0 +1,27 @@
+# Platform services scraped by Prometheus (the Pushgateway's ServiceMonitor comes from its chart).
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata: { name: mlflow, namespace: monitoring }
+spec:
+  namespaceSelector: { matchNames: [platform] }
+  selector: { matchLabels: { app: mlflow } }
+  endpoints:
+    - { port: http, path: /metrics, interval: 30s } # mlflow server --expose-prometheus
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata: { name: airflow-statsd, namespace: monitoring }
+spec:
+  namespaceSelector: { matchNames: [platform] }
+  selector: { matchLabels: { component: statsd, release: airflow } } # the Airflow chart's statsd-exporter
+  endpoints:
+    - { port: statsd-scrape, interval: 15s }
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata: { name: minio, namespace: monitoring }
+spec:
+  namespaceSelector: { matchNames: [platform] }
+  selector: { matchLabels: { app: minio } }
+  endpoints:
+    - { port: s3, path: /minio/v2/metrics/cluster, interval: 30s } # MINIO_PROMETHEUS_AUTH_TYPE=public

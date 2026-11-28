@@ -145,6 +145,7 @@ def test_canary_failure_problems():
         "aliases": aliases,
         "champion_before": "1",
         "apps": ["m", "m--champion"],
+        "last_result": 0.0,
     }
     assert verify.canary_failure_problems("m", "2", **ok) == []
     bad = {
@@ -156,6 +157,7 @@ def test_canary_failure_problems():
         },
         "aliases": {**aliases, "candidate": "2", "champion": "2"},
         "apps": ["m", "m--champion", "m--candidate"],
+        "last_result": 1.0,
     }
     assert verify.canary_failure_problems("m", "2", **bad) == [
         "v2 is candidate, not rejected",
@@ -163,6 +165,11 @@ def test_canary_failure_problems():
         "v2 still has the alias candidate, champion",
         "the champion changed from v1 to v2",
         "the RayService still serves m--candidate",
+        "modelport_canary_last_result is 1.0 in Prometheus, not 0",
+    ]
+    absent = {**ok, "last_result": None}
+    assert verify.canary_failure_problems("m", "2", **absent) == [
+        "modelport_canary_last_result is absent in Prometheus, not 0"
     ]
 
 
@@ -190,8 +197,6 @@ def test_batch_rerun_problems():
 
 
 def test_bench_problems(tmp_path):
-    import summarize  # on sys.path once verify.bench_problems has run
-
     (tmp_path / "README.md").write_text("<!-- bench:start -->\nx\n<!-- bench:end -->\n", encoding="utf-8")
     assert verify.bench_problems(tmp_path) == [
         "no docs/results/raw/bench-*.csv (run the bench workflow and commit its results)"
@@ -202,6 +207,8 @@ def test_bench_problems(tmp_path):
     lines = [f"{i},{p},1,2,3,j,t,h\n" for p in ("rayjob", "shared", "shared-warm") for i in range(5)]
     (raw / "bench-20260101T000000Z.csv").write_text(header + "".join(lines[:-1]), encoding="utf-8")
     problems = verify.bench_problems(tmp_path)
+    import summarize  # on sys.path once verify.bench_problems has run
+
     assert problems[0] == "bench-20260101T000000Z.csv: shared-warm has 4 rows, not 5"
     assert "stale" in problems[1]
     (raw / "bench-20260101T000000Z.csv").write_text(header + "".join(lines), encoding="utf-8")

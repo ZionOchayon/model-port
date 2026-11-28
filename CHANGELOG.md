@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- A Pushgateway in `monitoring` (`make up`), so job timings, gate and canary results and aliases reach
+  Prometheus, and ServiceMonitors for MLflow, Airflow's statsd-exporter and MinIO (FR-14).
+
 ## [0.2.0] - 2026-11-28
 
 ### Added

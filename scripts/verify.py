@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any, Final
 
 ROOT = Path(__file__).resolve().parents[1]
+PROMETHEUS_URL: Final = "http://localhost:9090"  # make ui
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 STAGE_CHECKS: dict[str, tuple[str, ...]] = {
@@ -432,8 +433,12 @@ def canary_failure_problems(
     aliases: Mapping[str, str | None],
     champion_before: str,
     apps: Sequence[str],
+    last_result: float | None,
 ) -> list[str]:
-    """What breaks FR-10 after the canary failure drill: the faulty version must be rolled back cleanly."""
+    """What breaks FR-10 after the canary failure drill: the faulty version must be rolled back cleanly.
+
+    `last_result` is `modelport_canary_last_result{model}` in Prometheus (pushed by the judge).
+    """
     from modelport.naming import Tag
 
     problems = []
@@ -451,6 +456,9 @@ def canary_failure_problems(
         problems.append(f"the champion changed from v{champion_before} to v{aliases.get('champion')}")
     if f"{model}--candidate" in apps:
         problems.append(f"the RayService still serves {model}--candidate")
+    if last_result != 0:
+        shown = "absent" if last_result is None else last_result
+        problems.append(f"modelport_canary_last_result is {shown} in Prometheus, not 0")
     return problems
 
 
@@ -483,6 +491,7 @@ def v10(ctx: Context) -> None:
         },
         champion_before=drill["champion_before"],
         apps=list(pip_by_app(config)),
+        last_result=_prometheus().scalar(f'max(modelport_canary_last_result{{model="{model}"}})'),
     )
     require(not problems, "; ".join(problems))
 
@@ -570,6 +579,12 @@ CHECKS: dict[str, Callable[[Context], None]] = {
     "V-07b": v07b,
     "V-08": v08,
 }
+
+
+def _prometheus() -> Any:  # noqa: ANN401 - PrometheusClient
+    from modelport_platform.canary.prometheus import PrometheusClient
+
+    return PrometheusClient(PROMETHEUS_URL)
 
 
 def _kubectl(*args: str) -> str:

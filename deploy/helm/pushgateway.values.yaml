@@ -1,0 +1,12 @@
+# prometheus-pushgateway 3.11.2 (app v1.11.4): job timings, gate and canary results, aliases (pushed by Airflow tasks).
+fullnameOverride: pushgateway # Service pushgateway.monitoring:9091 (MODELPORT_PUSHGATEWAY_URL)
+resources: # small: a few hundred series
+  requests: { cpu: 10m, memory: 32Mi }
+  limits: { cpu: 100m, memory: 128Mi }
+persistentVolume:
+  enabled: false # pushed values are re-pushed by the next run; losing them on a restart is acceptable
+serviceMonitor:
+  enabled: true # Prometheus scrapes the Pushgateway
+  namespace: monitoring
+  honorLabels: true # keep the pushed job and instance labels instead of the scrape's
+  interval: 15s
