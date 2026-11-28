@@ -163,3 +163,16 @@ def test_canary_failure_problems():
         "the champion changed from v1 to v2",
         "the RayService still serves m--candidate",
     ]
+
+
+def test_ops_wait_dag_run_if_exists(monkeypatch):
+    import ops
+
+    class Absent:
+        def get_run(self, dag_id, run_id):
+            return None
+
+    monkeypatch.setattr(ops, "airflow", Absent)
+    wait = ["wait-dag-run", "deploy_candidate", "deploy__m__v3"]
+    assert ops.main([*wait, "--if-exists", "--timeout", "1"]) == 0
+    assert ops.main([*wait, "--timeout", "0"]) != 0

@@ -34,8 +34,11 @@ checks=V-01,V-02,V-04,V-05,V-05d,V-06,V-07a,V-07b,V-08
 # ---- v0.2: serving (FR-9, FR-10, FR-11) ----
 if [[ $STAGE != v0.1 ]]; then
   TAB=examples/models/covertype-classifier
-  # the v3 retrain passes the gate and its canary, so fashion-classifier has a champion and a previous
-  group ops wait-alias fashion-classifier previous --timeout 2400
+  # whether the retrain (v3) and the kill-worker version (v4) pass the gate is training noise on the smoke data,
+  # and no check needs either promoted: wait for the deploys the gate started, if any, before the next model
+  for v in 3 4; do
+    group ops wait-dag-run deploy_candidate "deploy__fashion-classifier__v$v" --if-exists --timeout 2400
+  done
   group uv run python examples/datasets/prepare.py --dataset covertype --rows 20000 --upload
   group ops wait-dataset covertype 1 --timeout 900
   group mp submit "$TAB" --wait --timeout 3600

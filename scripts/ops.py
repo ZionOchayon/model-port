@@ -124,6 +124,9 @@ def run_state_done(state: str | None, wanted: str) -> bool:
 def wait_dag_run(args: argparse.Namespace) -> int:
     """Wait for a DAG run to reach a state."""
     client = airflow()
+    if args.if_exists and client.get_run(args.dag_id, args.run_id) is None:
+        print(f"ops: wait-dag-run {args.dag_id}/{args.run_id}: no such run, nothing to wait for")
+        return 0
 
     def done() -> bool:
         info = client.get_run(args.dag_id, args.run_id)
@@ -241,6 +244,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("dag_id")
     p.add_argument("run_id")
     p.add_argument("--state", choices=("success", "failed"), default="success")
+    p.add_argument("--if-exists", action="store_true", help="succeed at once when the run does not exist")
     p.add_argument("--timeout", type=float, default=3600)
     p.set_defaults(run=wait_dag_run)
     p = sub.add_parser("wait-alias", help="wait for an MLflow alias of a model")
