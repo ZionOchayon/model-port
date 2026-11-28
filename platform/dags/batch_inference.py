@@ -74,7 +74,8 @@ def batch_job(item: Mapping[str, Any], *, force: bool) -> dict[str, Any]:
             f" --batch-size {item['batch_size']} --num-cpus {item['num_cpus']}"
         ),
         "runtime_env": runtime_env,
-        "entrypoint_num_cpus": 0.5,
+        # the driver only drives Ray Data; a reserved CPU starved its ListFiles task on the 2-CPU smoke worker
+        "entrypoint_num_cpus": 0,
         "metadata": {"model": item["model"], "version": item["version"], "kind": "batch"},
         "force": force,
     }

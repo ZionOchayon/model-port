@@ -73,5 +73,6 @@ def test_submission_id_contains_day_and_version(store):
     job = dag_module.batch_job(cov, force=True)
     assert job["submission_id"] == "batch__covertype-classifier__2026-01-01-v2"
     assert job["force"] is True
+    assert job["entrypoint_num_cpus"] == 0  # the scoring actors get the CPUs
     assert job["runtime_env"]["pip"]["packages"] == ["covertype-classifier-pip==2"]
     assert f"--batch-size {cov['batch_size']}" in job["entrypoint"]
