@@ -7,13 +7,17 @@ piles up. Without a Pushgateway URL every push is skipped; a failed push is logg
 
 import time
 from collections.abc import Callable, Mapping
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from prometheus_client import CollectorRegistry, Gauge, delete_from_gateway, push_to_gateway
 
 from modelport.lifecycle import AliasSnapshot
 from modelport.logs import get_logger
+from modelport.spec import DriftSpec
 from modelport_platform.metrics import names
+
+if TYPE_CHECKING:
+    from modelport_platform.drift.check import DriftResult
 
 _log = get_logger(__name__)
 _SOURCES = ("gate", "canary", "aliases")
@@ -86,6 +90,26 @@ def push_job_timing(
                 Gauge(metric, "Seconds", registry=registry).set(value)
 
     _push(url, names.JOB_JOBS, {"model": model, "pattern": pattern, "kind": kind}, fill)
+
+
+def push_drift(url: str | None, model: str, result: "DriftResult", spec: DriftSpec) -> None:
+    """PSI per feature, the thresholds and the sample count; a skipped check pushes no PSI.
+
+    The PUT replaces the group, so a skipped check also removes the previous PSI series.
+    """
+
+    def fill(registry: CollectorRegistry) -> None:
+        psi = Gauge(names.PSI, "PSI against the champion's baseline", ["feature"], registry=registry)
+        for feature, value in result.psi.items():
+            psi.labels(feature=feature).set(value)
+        threshold = Gauge(names.PSI_THRESHOLD, "PSI alert thresholds", ["level"], registry=registry)
+        threshold.labels(level="warning").set(spec.psi_warning)
+        threshold.labels(level="critical").set(spec.psi_critical)
+        Gauge(names.DRIFT_SAMPLES, "Logged rows in the window", registry=registry).set(result.samples)
+        if not result.skipped:
+            Gauge(names.DRIFT_LAST_SUCCESS, "Unix time of the last PSI", registry=registry).set(time.time())
+
+    _push(url, names.JOB_DRIFT, {"model": model}, fill)
 
 
 def delete_model_groups(url: str | None, model: str) -> None:

@@ -12,6 +12,7 @@ Commands:
   trigger <dag_id> <run_id> [--conf JSON] [--wait] [--timeout S]   start a DAG run (idempotent)
   snapshot-predictions --day D --out FILE          row counts and row hashes of s3://predictions/*/<D>/
   wait-checkpoint <model> <rayjob> [--timeout S]   Ray Train registered a checkpoint of that run
+  wait-metric <promql> [--timeout S]               the aggregating PromQL query has a value in Prometheus
 """
 
 from __future__ import annotations
@@ -227,6 +228,14 @@ def wait_checkpoint(args: argparse.Namespace) -> int:
     )
 
 
+def wait_metric(args: argparse.Namespace) -> int:
+    """Wait until an aggregating PromQL query returns a value."""
+    from modelport_platform.canary.prometheus import PrometheusClient
+
+    client = PrometheusClient(credentials().get("MODELPORT_PROMETHEUS_URL", "http://localhost:9090"))
+    return poll(f"wait-metric {args.promql}", lambda: client.scalar(args.promql) is not None, args.timeout)
+
+
 def main(argv: list[str] | None = None) -> int:
     """Dispatch a subcommand."""
     parser = argparse.ArgumentParser(description="modelport platform operations")
@@ -268,6 +277,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("rayjob")
     p.add_argument("--timeout", type=float, default=1800)
     p.set_defaults(run=wait_checkpoint)
+    p = sub.add_parser("wait-metric", help="wait for a PromQL query to return a value")
+    p.add_argument("promql")
+    p.add_argument("--timeout", type=float, default=300)
+    p.set_defaults(run=wait_metric)
     args = parser.parse_args(argv)
     code: int = args.run(args)
     return code

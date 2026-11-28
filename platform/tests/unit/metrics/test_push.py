@@ -95,3 +95,35 @@ def test_delete_model_groups(pushes):
         ("modelport_lifecycle", (("model", "m"), ("source", "gate"))),
         ("modelport_drift", (("model", "m"),)),
     }
+
+
+def test_push_drift(pushes):
+    from modelport.spec import DriftSpec
+    from modelport_platform.drift.check import DriftResult
+
+    spec = DriftSpec(psi_warning=0.1, psi_critical=0.25)
+    done = DriftResult(
+        model="m",
+        version="3",
+        samples=800,
+        psi={"stat_x": 0.3, "prediction": 0.02},
+        skipped=False,
+        reason=None,
+    )
+    push.push_drift(URL, "m", done, spec)
+    skipped = DriftResult(
+        model="m", version="3", samples=0, psi={}, skipped=True, reason="0 rows < min_samples 500"
+    )
+    push.push_drift(URL, "m", skipped, spec)
+    first, second = pushes
+    assert (first["job"], first["key"]) == ("modelport_drift", {"model": "m"})
+    series = {(name, tuple(sorted(labels.items()))): value for name, labels, value in first["series"]}
+    assert series[(names.PSI, (("feature", "stat_x"),))] == 0.3
+    assert series[(names.PSI_THRESHOLD, (("level", "critical"),))] == 0.25
+    assert series[(names.PSI_THRESHOLD, (("level", "warning"),))] == 0.1
+    assert series[(names.DRIFT_SAMPLES, ())] == 800
+    assert first["samples"][names.DRIFT_LAST_SUCCESS] > 1.7e9
+    # a skipped check replaces the group: samples 0, thresholds kept, no PSI series left behind
+    assert names.PSI not in second["samples"]
+    assert second["samples"][names.DRIFT_SAMPLES] == 0
+    assert names.PSI_THRESHOLD in second["samples"]

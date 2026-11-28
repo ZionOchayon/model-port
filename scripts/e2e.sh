@@ -58,6 +58,9 @@ if [[ $STAGE != v0.1 ]]; then
     group ops snapshot-predictions --day "$DAY" --out ".data/v12-run$i.json"
   done
   checks=$checks,V-09,V-10,V-11,V-12
+  # drift check (FR-16): the drills' traffic is in the inference logs; the samples count is pushed either way
+  group ops trigger drift_check "ci_drift_${GITHUB_RUN_ID:-local}" --wait --timeout 900
+  group ops wait-metric 'max(modelport_drift_samples{model="fashion-classifier"})' --timeout 120
 fi
 if [[ $STAGE == v0.3 ]]; then
   echo "e2e: stage $STAGE is not implemented yet" >&2

@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Airflow DAG `drift_check` (daily, or for given `models`, `window_hours` and `end`): the PSI of each
+  champion's logged traffic against its training baseline, per feature, pushed with the model's thresholds
+  and sample count; too few rows push the count and no PSI. Drift never retrains a model (FR-16).
+  `scripts/ops.py wait-metric` waits for a PromQL query to return a value.
 - A Pushgateway in `monitoring` (`make up`), so job timings, gate and canary results and aliases reach
   Prometheus, and ServiceMonitors for MLflow, Airflow's statsd-exporter and MinIO (FR-14).
 
