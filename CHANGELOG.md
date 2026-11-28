@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Prometheus recording rules (`deploy/monitoring/prometheus-rules.yaml`): each champion's live confidence
+  mean, prediction rate and class shares next to its baseline, and each Serve app's error ratio and p95
+  latency; `scripts/extract_rules.py` and a `promtool check rules` step in CI (FR-16, FR-17).
 - Airflow DAG `drift_check` (daily, or for given `models`, `window_hours` and `end`): the PSI of each
   champion's logged traffic against its training baseline, per feature, pushed with the model's thresholds
   and sample count; too few rows push the count and no PSI. Drift never retrains a model (FR-16).

@@ -4,3 +4,4 @@ namespace: monitoring
 resources:
   - podmonitors.yaml
   - servicemonitors.yaml
+  - prometheus-rules.yaml

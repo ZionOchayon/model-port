@@ -107,6 +107,12 @@ jobs:
             if [ -f "$d/kustomization.yaml" ]; then kubectl kustomize "$d" > /dev/null; else echo "::notice::$d not present yet"; fi
           done
 
+      - name: promtool check rules
+        run: |
+          set -a; . ./versions.env; set +a
+          uv run python scripts/extract_rules.py deploy/monitoring/prometheus-rules.yaml deploy/monitoring/.rules.generated.yaml
+          docker run --rm -v "$PWD/deploy/monitoring:/w" -w /w --entrypoint promtool "$PROMETHEUS_IMAGE" check rules .rules.generated.yaml
+
       - name: promtool rules tests (FR-17)
         if: hashFiles('deploy/monitoring/rules-tests.yaml') != ''
         run: make rules-test

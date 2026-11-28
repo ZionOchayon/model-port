@@ -1,0 +1,41 @@
+# modelport's Prometheus rules. The recording rules give the live-drift and Serve series the alerts and
+# dashboards read; they look at champion apps only (`<model>--champion`), so a canary does not move them.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: modelport
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: modelport
+spec:
+  groups:
+    - name: modelport.recording
+      interval: 1m
+      rules:
+        - record: modelport:confidence_mean:1h
+          expr: |
+            sum by (model) (rate(ray_modelport_prediction_confidence_sum{application=~".+--champion"}[1h]))
+              /
+            sum by (model) (rate(ray_modelport_prediction_confidence_count{application=~".+--champion"}[1h]))
+        - record: modelport:prediction_rate:1h
+          expr: |
+            sum by (model) (rate(ray_modelport_prediction_confidence_count{application=~".+--champion"}[1h]))
+        - record: modelport:class_share:1h
+          expr: |
+            sum by (model, predicted_class) (rate(ray_modelport_predictions_total{application=~".+--champion"}[1h]))
+              / ignoring (predicted_class) group_left
+            sum by (model) (rate(ray_modelport_predictions_total{application=~".+--champion"}[1h]))
+        - record: modelport:baseline_confidence_mean
+          expr: max by (model) (ray_modelport_baseline_confidence_mean{application=~".+--champion"})
+        - record: modelport:baseline_class_share
+          expr: max by (model, predicted_class) (ray_modelport_baseline_class_share{application=~".+--champion"})
+        - record: modelport:live_drift_threshold
+          expr: max by (model, kind) (ray_modelport_live_drift_threshold{application=~".+--champion"})
+        - record: modelport:serve_error_ratio:5m
+          expr: |
+            sum by (application) (rate(ray_serve_num_http_error_requests_total{error_code=~"5.."}[5m]))
+              /
+            sum by (application) (rate(ray_serve_num_http_requests_total[5m]))
+        - record: modelport:serve_latency_p95_ms:5m
+          expr: |
+            histogram_quantile(0.95, sum by (application, le) (rate(ray_serve_http_request_latency_ms_bucket[5m])))
