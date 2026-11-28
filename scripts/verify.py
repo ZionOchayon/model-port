@@ -174,6 +174,7 @@ class Context:
     registry: Any  # MlflowRegistry
     airflow: Any  # AirflowClient
     store: Any  # S3DatasetStore
+    profile: str = "smoke"
 
     def versions(self) -> list[Any]:
         """Every version of the model (MLflow ModelVersion objects)."""
@@ -563,7 +564,15 @@ def v13(ctx: Context) -> None:
     require(not problems, "; ".join(problems))
 
 
+def v14(ctx: Context) -> None:
+    """FR-14: scripts/metrics_check.py passes (every target up, every source with data)."""
+    import metrics_check
+
+    require(metrics_check.main(["--profile", ctx.profile]) == 0, "metrics_check.py failed (problems above)")
+
+
 CHECKS: dict[str, Callable[[Context], None]] = {
+    "V-14": v14,
     "V-13": v13,
     "V-12": v12,
     "V-10": v10,
@@ -621,6 +630,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     stage = args.stage or default_stage((ROOT / "CHANGELOG.md").read_text(encoding="utf-8"))
     wanted = parse_checks(args.checks) if args.checks else checks_for_stage(stage)
     ctx = build_context(args.model)
+    ctx.profile = args.profile
     results: list[tuple[str, str | None]] = []
     for check in wanted:
         fn = CHECKS.get(check)

@@ -66,6 +66,11 @@ if [[ $STAGE != v0.1 ]]; then
   # drift check (FR-16): the drills' traffic is in the inference logs; the samples count is pushed either way
   group ops trigger drift_check "ci_drift_${GITHUB_RUN_ID:-local}" --wait --timeout 900
   group ops wait-metric 'max(modelport_drift_samples{model="fashion-classifier"})' --timeout 120
+  # metrics (FR-14): a run that must fail, so airflow_dagrun_failed_count exists, then every source
+  NEG="ci_negative_${GITHUB_RUN_ID:-local}"
+  group ops trigger train_model "$NEG" --conf '{"model": "fashion-classifier", "submission_run_id": "does-not-exist"}'
+  group ops wait-dag-run train_model "$NEG" --state failed --timeout 900
+  group uv run python scripts/metrics_check.py --profile "$P" --negative
 fi
 if [[ $STAGE == v0.3 ]]; then
   echo "e2e: stage $STAGE is not implemented yet" >&2

@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `make metrics-check` (FR-14, check V-14): every Prometheus target is up, every required scrape pool has
+  a target, and Ray, KubeRay, Serve, the models, Airflow, drift, the lifecycle pushes and Kubernetes all
+  have data. The CI end-to-end flow runs it after a deliberately failing DAG run.
 - Airflow DAG `simulate_drift` (manual): sends a champion deliberately drifted requests (`brightness`,
   `noise` or `invert` for an image model, `shift_feature` for a tabular one) for a few minutes, then runs
   `drift_check` over the last hour, so the drift alerts fire on demand (FR-16).

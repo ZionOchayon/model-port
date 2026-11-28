@@ -36,7 +36,7 @@ bench: ## FR-13 measurements and failure drills; updates docs/results and README
 	@bash scripts/ui.sh && set -a && . .modelport/credentials.env && set +a && uv run python bench/bench.py --reps $(REPS)
 
 metrics-check: ## Every Prometheus target is up and every catalogue metric has data
-	@echo "make metrics-check: not implemented yet"; exit 1
+	@uv run python scripts/metrics_check.py --profile $(PROFILE)
 
 test: ## Unit, contract and local integration tests (no cluster)
 	@uv run pytest
