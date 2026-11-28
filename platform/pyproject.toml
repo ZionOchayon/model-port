@@ -13,6 +13,7 @@ dependencies = [
 [project.optional-dependencies]
 airflow = [
   "kubernetes==36.0.3",
+  "pillow==13.0.0",                # simulate_drift perturbs images
   "ray[default]==2.60.1",          # Jobs API client only
 ]
 ray = [

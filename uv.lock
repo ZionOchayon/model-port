@@ -1238,6 +1238,7 @@ dependencies = [
 [package.optional-dependencies]
 airflow = [
     { name = "kubernetes" },
+    { name = "pillow" },
     { name = "ray", extra = ["default"] },
 ]
 ray = [
@@ -1249,6 +1250,7 @@ requires-dist = [
     { name = "boto3", specifier = ">=1.40" },
     { name = "kubernetes", marker = "extra == 'airflow'", specifier = "==36.0.3" },
     { name = "modelport", editable = "sdk" },
+    { name = "pillow", marker = "extra == 'airflow'", specifier = "==13.0.0" },
     { name = "prometheus-client", specifier = "==0.26.0" },
     { name = "ray", extras = ["default"], marker = "extra == 'airflow'", specifier = "==2.60.1" },
     { name = "ray", extras = ["default", "train", "serve", "data"], marker = "extra == 'ray'", specifier = "==2.60.1" },

@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Airflow DAG `simulate_drift` (manual): sends a champion deliberately drifted requests (`brightness`,
+  `noise` or `invert` for an image model, `shift_feature` for a tabular one) for a few minutes, then runs
+  `drift_check` over the last hour, so the drift alerts fire on demand (FR-16).
 - Four Grafana dashboards in the folder `modelport` (full profile): Platform overview, Serving, Models
   (versions, gate and canary results, PSI, live confidence and class shares against the baseline) and
   Pipelines (DAG runs, task durations, the Ray patterns' timings) (FR-15).
