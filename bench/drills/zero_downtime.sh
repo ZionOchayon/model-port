@@ -5,18 +5,23 @@
 set -euo pipefail
 MODEL=${1:-fashion-classifier}
 SRC=examples/models/image-classifier
-EPOCHS=6 # more than the kill-worker drill's champion (4), so the gate passes clearly
+EPOCHS=6
 RPS=5
 DURATION=420 # a deploy with a 2-minute window took about 3.5 minutes on the CI runner
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 status() { uv run modelport --json status "$MODEL" | python3 -c "import json,sys; d=json.load(sys.stdin); print($1)"; }
 
-# a new version that passes the gate but is not deployed by itself: the drill starts its deploy under load
+# a new version that is not deployed by itself (the drill starts its deploy under load); its gate limits are
+# wide because training noise can put a retrain below the champion: this drill tests the swap, V-07 the gate
 cp -r "$SRC" "$work/model"
 sed -e "s/^  epochs: .*/  epochs: $EPOCHS/" -e "s/^serving:$/serving:\n  auto_deploy: false/" \
+  -e "s/^  min_improvement: .*/  min_improvement: -0.1/" \
+  -e "s/^  max_drop_per_class: .*/  max_drop_per_class: 0.3/" \
+  -e "s/^  max_latency_increase: .*/  max_latency_increase: 1.0/" \
   "$SRC/model.fashion.yaml" > "$work/model/model.fashion-zd.yaml"
 grep -q "^  auto_deploy: false$" "$work/model/model.fashion-zd.yaml"
+grep -q "^  min_improvement: -0.1$" "$work/model/model.fashion-zd.yaml"
 grep -q "^name: $MODEL$" "$work/model/model.fashion-zd.yaml"
 uv run modelport submit "$work/model" --spec model.fashion-zd.yaml --wait --timeout 3600
 version=$(status 'd["newest"]["version"]')
