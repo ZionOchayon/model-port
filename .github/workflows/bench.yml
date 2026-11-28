@@ -1,0 +1,81 @@
+name: bench
+
+# `make bench` (FR-13, NFR-5) on one GitHub-hosted runner. Manual only. Results are uploaded as an
+# artifact and committed by hand, so every README number comes from this script on a stated host.
+on:
+  push:
+    branches: ["bench-run/**"]
+  workflow_dispatch:
+    inputs:
+      reps:
+        description: "Repetitions per pattern (n)"
+        default: "5"
+
+permissions:
+  contents: read
+
+jobs:
+  bench:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          version: "0.13.10"
+
+      - name: Install kind, kubectl, helm (pinned, sha256-checked)
+        run: sudo DEST=/usr/local/bin bash scripts/install-tools.sh
+
+      - name: Sync
+        run: uv sync --all-packages --group dev
+
+      - name: Cache MinIO image
+        id: minio-cache
+        uses: actions/cache@v6.1.0
+        with:
+          path: ${{ runner.temp }}/minio-image.tar
+          key: minio-${{ hashFiles('versions.env', 'deploy/images/minio/Dockerfile') }}
+
+      - name: Load cached MinIO image
+        if: steps.minio-cache.outputs.cache-hit == 'true'
+        run: docker load -i "$RUNNER_TEMP/minio-image.tar"
+
+      - name: Host facts
+        run: |
+          nproc; free -g; lscpu | grep 'Model name'
+          { echo "runner: $(nproc) vCPU, $(free -g | awk '/Mem:/{print $2}') GiB"; lscpu | grep 'Model name'; } > host.txt
+
+      - name: Up
+        run: make up PROFILE=smoke
+
+      - name: Bench
+        run: make bench REPS=${{ inputs.reps || '5' }}
+
+      - name: Collect
+        if: always()
+        run: |
+          mkdir -p artifacts
+          cp -r docs/results README.md host.txt artifacts/ 2>/dev/null || true
+          cp -r .data artifacts/data 2>/dev/null || true
+          rm -rf artifacts/data/raw # the dataset downloads
+
+      - name: Collect logs
+        if: failure()
+        run: bash scripts/collect-logs.sh
+
+      - uses: actions/upload-artifact@v7.0.2
+        if: always()
+        with:
+          name: bench-results
+          path: artifacts
+
+      - name: Down
+        if: always()
+        run: make down

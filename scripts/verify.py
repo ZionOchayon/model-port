@@ -526,7 +526,36 @@ def v12(ctx: Context) -> None:
     require(not problems, "; ".join(problems))
 
 
+BENCH_REPS = 5
+
+
+def bench_problems(root: Path) -> list[str]:
+    """V-13 on a checkout: the newest bench CSV has BENCH_REPS rows per pattern and the table matches it."""
+    sys.path.insert(0, str(ROOT / "bench"))
+    import summarize
+
+    raw = sorted((root / "docs/results/raw").glob("bench-*.csv"))
+    if not raw:
+        return ["no docs/results/raw/bench-*.csv (run the bench workflow and commit its results)"]
+    counts = summarize.counts(summarize.load(raw[-1]))
+    problems = [
+        f"{raw[-1].name}: {pattern} has {counts.get(pattern, 0)} rows, not {BENCH_REPS}"
+        for pattern in summarize.PATTERNS
+        if counts.get(pattern, 0) != BENCH_REPS
+    ]
+    if summarize.main(["--root", str(root), "--check", str(root / "README.md")]) != 0:
+        problems.append("docs/results/table.md or the README block is stale (python bench/summarize.py)")
+    return problems
+
+
+def v13(ctx: Context) -> None:
+    """The FR-13 table: n = 5 per pattern, and README and table.md generated from the newest CSV."""
+    problems = bench_problems(ROOT)
+    require(not problems, "; ".join(problems))
+
+
 CHECKS: dict[str, Callable[[Context], None]] = {
+    "V-13": v13,
     "V-12": v12,
     "V-10": v10,
     "V-09": v09,

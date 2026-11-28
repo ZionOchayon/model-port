@@ -21,6 +21,7 @@ _spec = importlib.util.spec_from_file_location("sdk_fakes", ROOT / "sdk/tests/fa
 sdk_fakes = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(sdk_fakes)
 DAY = date(2026, 1, 1)
+MLFLOW, S3 = "http://mlflow:5000", "http://minio:9000"
 
 
 def registry():
@@ -55,7 +56,7 @@ def test_plan_locks_version(store):
     assert cov["output_uri"] == "s3://predictions/covertype-classifier/2026-01-01/"
     assert cov["runtime_pip"] == ["covertype-classifier-pip==2"]
     reg.aliases["covertype-classifier"][Alias.CHAMPION] = "1"  # a promotion after plan
-    item = dag_module.batch_job(cov, force=False)
+    item = dag_module.batch_job(cov, force=False, mlflow_uri=MLFLOW, s3_endpoint=S3)
     assert "--version 2" in item["entrypoint"]  # the job uses the version plan locked
     only = dag_module.plan(reg, store, ["fashion-classifier"], DAY)
     assert [p["model"] for p in only] == ["fashion-classifier"]
@@ -70,9 +71,12 @@ def test_plan_skips_empty_input(store):
 def test_submission_id_contains_day_and_version(store):
     inputs(store, "covertype")
     (cov,) = dag_module.plan(registry(), store, None, DAY)
-    job = dag_module.batch_job(cov, force=True)
+    job = dag_module.batch_job(cov, force=True, mlflow_uri=MLFLOW, s3_endpoint=S3)
     assert job["submission_id"] == "batch__covertype-classifier__2026-01-01-v2"
     assert job["force"] is True
     assert job["entrypoint_num_cpus"] == 0  # the scoring actors get the CPUs
     assert job["runtime_env"]["pip"]["packages"] == ["covertype-classifier-pip==2"]
     assert f"--batch-size {cov['batch_size']}" in job["entrypoint"]
+    assert job["runtime_env"]["env_vars"]["MLFLOW_TRACKING_URI"] == MLFLOW
+    keyed = dag_module.batch_job(cov, force=True, mlflow_uri=MLFLOW, s3_endpoint=S3, key="bench-shared-1")
+    assert keyed["submission_id"] == "batch__covertype-classifier__bench-shared-1"

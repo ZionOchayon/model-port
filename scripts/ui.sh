@@ -19,6 +19,7 @@ forwards=(
   "MinIO-S3 platform minio 9000:9000"
   "Ray-dashboard ray modelport-shared-head-svc 8265:8265"
   "Serve ray modelport-serve-serve-svc 8000:8000"
+  "Prometheus monitoring kps-prometheus 9090:9090"
 )
 for forward in "${forwards[@]}"; do
   read -r name ns svc ports <<< "$forward"

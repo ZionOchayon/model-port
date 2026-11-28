@@ -187,3 +187,23 @@ def test_batch_rerun_problems():
     assert verify.batch_rerun_problems(run, other, inputs) == ["n: the two runs wrote different predictions"]
     assert verify.batch_rerun_problems(run, run, {"m": 3, "n": 1}) == ["m: 2 predictions for 3 input rows"]
     assert verify.batch_rerun_problems({}, {}, inputs) == ["m: no predictions", "n: no predictions"]
+
+
+def test_bench_problems(tmp_path):
+    import summarize  # on sys.path once verify.bench_problems has run
+
+    (tmp_path / "README.md").write_text("<!-- bench:start -->\nx\n<!-- bench:end -->\n", encoding="utf-8")
+    assert verify.bench_problems(tmp_path) == [
+        "no docs/results/raw/bench-*.csv (run the bench workflow and commit its results)"
+    ]
+    raw = tmp_path / "docs/results/raw"
+    raw.mkdir(parents=True)
+    header = "rep,pattern,startup_s,duration_s,cpu_s,job_id,started_at_utc,host\n"
+    lines = [f"{i},{p},1,2,3,j,t,h\n" for p in ("rayjob", "shared", "shared-warm") for i in range(5)]
+    (raw / "bench-20260101T000000Z.csv").write_text(header + "".join(lines[:-1]), encoding="utf-8")
+    problems = verify.bench_problems(tmp_path)
+    assert problems[0] == "bench-20260101T000000Z.csv: shared-warm has 4 rows, not 5"
+    assert "stale" in problems[1]
+    (raw / "bench-20260101T000000Z.csv").write_text(header + "".join(lines), encoding="utf-8")
+    assert summarize.main(["--root", str(tmp_path)]) == 0
+    assert verify.bench_problems(tmp_path) == []

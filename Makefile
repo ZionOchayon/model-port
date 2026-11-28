@@ -32,8 +32,8 @@ demo: ## Onboard both example models end to end, then inject drift
 verify: ## Check runs from their artifacts (MLflow, RayJob state, S3, Prometheus)
 	@echo "make verify: not implemented yet"; exit 1
 
-bench: ## FR-13 measurements and failure drills; updates docs/results and README
-	@echo "make bench: not implemented yet"; exit 1
+bench: ## FR-13 measurements and failure drills; updates docs/results and README (REPS=5)
+	@bash scripts/ui.sh && set -a && . .modelport/credentials.env && set +a && uv run python bench/bench.py --reps $(REPS)
 
 metrics-check: ## Every Prometheus target is up and every catalogue metric has data
 	@echo "make metrics-check: not implemented yet"; exit 1

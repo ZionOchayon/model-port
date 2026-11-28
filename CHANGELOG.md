@@ -8,6 +8,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `make bench REPS=5` and the manual `bench` workflow (FR-13): the same batch job run as a RayJob with its
+  own cluster and on the shared cluster (workers from zero, and with a worker already up), with startup,
+  duration and CPU-seconds per run in `docs/results/raw/`, the median and range in `docs/results/table.md`
+  and the README, and the three failure drills' outcomes in `docs/results/drills.md` (check V-13).
+  `make ui` also forwards Prometheus (`localhost:9090`).
 - Airflow DAG `batch_inference` (daily, or for a given `day` and `models`): scores the day's input under
   `s3://batch-input/<dataset>/<day>/` with each model's champion on the shared Ray cluster, the version
   locked when the run starts, into `s3://predictions/<model>/<day>/` with a `_SUCCESS.json` marker. A

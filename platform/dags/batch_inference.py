@@ -6,79 +6,19 @@ replaces its predictions and never duplicates them.
 """
 
 import json
-from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from airflow.sdk import Param, dag, task
 
 from modelport.logs import get_logger
-from modelport.naming import Tag, batch_input_uri, prediction_uri, shared_job_id
 from modelport_platform import dagkit
-from modelport_platform.dagkit import Pool, ServeRegistry
+from modelport_platform.batch.plan import batch_job, plan
+from modelport_platform.dagkit import Pool
 from modelport_platform.metrics.push import push_job_timing
-from modelport_platform.ports import DatasetStore
 
 _log = get_logger(__name__)
 BATCH_TIMEOUT_S = 3600
-
-
-def plan(
-    reg: ServeRegistry, store: DatasetStore, models: Sequence[str] | None, day: date
-) -> list[dict[str, Any]]:
-    """One job per champion with input for `day`, each pinned to the champion version found now."""
-    planned = []
-    for model in models or reg.list_models():
-        champion = reg.snapshot(model).champion
-        if champion is None:
-            continue
-        info = reg.get_version(model, champion)
-        spec = dagkit.spec_for_version(reg, info)
-        input_uri = batch_input_uri(spec.data.dataset_name, day)
-        if not store.list(input_uri):
-            _log.info("batch.no_input", model=model, input_uri=input_uri)
-            continue
-        planned.append(
-            {
-                "model": model,
-                "version": champion,
-                "day": day.isoformat(),
-                "input_uri": input_uri,
-                "output_uri": prediction_uri(model, day),
-                "runtime_pip": list(json.loads(info.tags.get(Tag.RUNTIME_PIP) or "[]")),
-                "batch_size": spec.resources.batch.batch_size,
-                "num_cpus": spec.resources.batch.cpus_per_task,
-            }
-        )
-    return planned
-
-
-def batch_job(item: Mapping[str, Any], *, force: bool) -> dict[str, Any]:
-    """The `submit_idempotent` arguments of one planned job (ID by model, day and locked version)."""
-    settings = dagkit.settings()
-    runtime_env: dict[str, Any] = {
-        # non-secret settings only: credentials come from the pods' Secret
-        "env_vars": {
-            "MLFLOW_TRACKING_URI": settings.mlflow_uri,
-            "MODELPORT_S3_ENDPOINT": settings.s3_endpoint,
-            "AWS_ENDPOINT_URL": settings.s3_endpoint,
-        },
-    }
-    if item["runtime_pip"]:
-        runtime_env["pip"] = {"packages": list(item["runtime_pip"]), "pip_check": False}
-    return {
-        "submission_id": shared_job_id("batch", item["model"], f"{item['day']}-v{item['version']}"),
-        "entrypoint": (
-            f"python -m modelport_platform.batch.job --model {item['model']} --version {item['version']}"
-            f" --input-uri {item['input_uri']} --output-uri {item['output_uri']} --day {item['day']}"
-            f" --batch-size {item['batch_size']} --num-cpus {item['num_cpus']}"
-        ),
-        "runtime_env": runtime_env,
-        # the driver only drives Ray Data; a reserved CPU starved its ListFiles task on the 2-CPU smoke worker
-        "entrypoint_num_cpus": 0,
-        "metadata": {"model": item["model"], "version": item["version"], "kind": "batch"},
-        "force": force,
-    }
 
 
 def run_day(day_param: str | None, logical_date: datetime | None, run_after: datetime | None) -> date:
@@ -114,7 +54,12 @@ def batch_inference() -> None:
     @task(task_id="run_batch", pool=Pool.SHARED_CLUSTER, execution_timeout=timedelta(seconds=BATCH_TIMEOUT_S))
     def run_task(item: dict[str, Any], params: Any = None) -> dict[str, Any]:  # noqa: ANN401
         jobs, settings = dagkit.jobs(), dagkit.settings()
-        job = batch_job(item, force=bool(params["force_rerun"]))
+        job = batch_job(
+            item,
+            force=bool(params["force_rerun"]),
+            mlflow_uri=settings.mlflow_uri,
+            s3_endpoint=settings.s3_endpoint,
+        )
         jobs.submit_idempotent(**job)
         timings = jobs.wait(job["submission_id"], timeout_s=BATCH_TIMEOUT_S)
         push_job_timing(

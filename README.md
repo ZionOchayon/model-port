@@ -72,7 +72,7 @@ All options and exit codes: [CLI reference](docs/components/cli.md).
 | --- | --- |
 | `make up` | Create the kind cluster and install everything (`PROFILE=full` or `smoke`). |
 | `make down` | Delete the cluster and local state. |
-| `make ui` | Port-forward Airflow, MLflow, MinIO and the Ray dashboard, and print the URLs and login. |
+| `make ui` | Port-forward Airflow, MLflow, MinIO, the Ray dashboard, Serve and Prometheus, and print the URLs and login. |
 | `make images` | Build the three modelport images and load them into kind. |
 | `make test` | Unit, contract and local integration tests (no cluster). |
 | `make lint` | `ruff check` and `ruff format --check`. |
@@ -104,6 +104,14 @@ How it is installed, key by key: [infrastructure](docs/components/infrastructure
 Working: ingest with quality checks and quarantine, dataset versions, retraining on new data, distributed training with checkpoints and resume, registration with lineage and a drift baseline, the evaluation gate, and `validate`, `submit` and `status`. CI brings the whole platform up on kind and runs this flow end to end, including a deliberately broken model that must be rejected and a training worker killed mid-run.
 
 Not yet: serving, canary and `promote` / `rollback` / `predict` (v0.2), batch inference (v0.2), drift detection, dashboards and alerts (v0.3). Measured results will be published from `make bench` in v0.2.
+
+## Results
+
+RayJob per job against the shared cluster, measured by `make bench` ([method](bench/README.md)):
+
+<!-- bench:start -->
+No measurements yet: they come from the `bench` workflow (`make bench`), n = 5 per pattern.
+<!-- bench:end -->
 
 ## Known gaps
 
