@@ -6,8 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-28
+
 ### Added
 
+- Documentation for v0.2: component guides for serving, the canary and rollback, batch inference and the
+  bench; the CLI reference for `predict`, `promote` and `rollback`; the kube-prometheus-stack values key by
+  key; runbook entries for canaries, serving apps, promotions, `predict` and batch days; and a README
+  section on the three Ray patterns with the measured results.
 - `make bench REPS=5` and the manual `bench` workflow (FR-13): the same batch job run as a RayJob with its
   own cluster and on the shared cluster (workers from zero, and with a worker already up), with startup,
   duration and CPU-seconds per run in `docs/results/raw/`, the median and range in `docs/results/table.md`
@@ -131,5 +137,6 @@ All notable changes to this project are documented here. The format follows
 - Local Ray Train integration test: TorchTrainer with DDP (gloo), a checkpoint per epoch and resume; XGBoostTrainer
   with a checkpoint per boosting round and resume.
 
-[Unreleased]: https://github.com/ZionOchayon/model-port/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/ZionOchayon/model-port/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/ZionOchayon/model-port/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/ZionOchayon/model-port/releases/tag/v0.1.0

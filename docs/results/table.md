@@ -1,6 +1,6 @@
 # Bench results (FR-13)
 
-Method: `bench/README.md`.
+Method: [docs/components/bench.md](../components/bench.md).
 
 | Pattern | n | Startup s | Duration s | CPU-seconds |
 | --- | --- | --- | --- | --- |

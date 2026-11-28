@@ -63,7 +63,7 @@ MLflow 3 checks the `Host` header against `--allowed-hosts`. The server allows i
 
 ## `make ui`: port already in use
 
-A URL that `make ui` printed does not answer: each port-forward writes to `/tmp/modelport-ui-<name>.log`, and `unable to listen on port ...: address already in use` there means another process holds 8080, 5000, 9000, 8265 or 8000, often an earlier `make ui`. Stop the old forwards (`pkill -f "kubectl.*port-forward"`) or the other process, then run `make ui` again.
+A URL that `make ui` printed does not answer: each port-forward writes to `/tmp/modelport-ui-<name>.log`, and `unable to listen on port ...: address already in use` there means another process holds 8080, 5000, 9000, 8265, 8000 or 9090, often an earlier `make ui`. Stop the old forwards (`pkill -f "kubectl.*port-forward"`) or the other process, then run `make ui` again.
 
 ## `modelport` says it cannot reach Airflow
 
@@ -72,3 +72,23 @@ A URL that `make ui` printed does not answer: each port-forward writes to `/tmp/
 ## A version is `rejected`
 
 That is the gate working, not a failure. `modelport status <model>` lists every reason with its numbers, and the report next to the champion's; see [components/gate.md](components/gate.md).
+
+## A canary was rolled back
+
+That is the canary working: the version is `rejected`, the champion kept serving, and the `judge` task log and the version's `modelport.canary.reasons` tag in MLflow list every failed rule with its numbers ([components/canary.md](components/canary.md#the-rules)). `only N requests reached the candidate` means the window had too little traffic: on a local stack keep `synthetic_traffic` on, or trigger `deploy_candidate` again with a longer `observation_minutes`.
+
+## A serving app does not start
+
+`deploy_candidate` or `serve_sync` fails at a `wait_*` task with the app's message. `kubectl --context kind-modelport -n ray get rayservice modelport-serve -o yaml` shows each app's status. `signature self-test failed for <model> v<N>` means the version cannot score its own example input: fix the model and submit it again. An app stuck `DEPLOYING` usually waits for CPU or memory: see [Pods stay `Pending`](#pods-stay-pending), and lower `resources.serve` in `model.yaml`.
+
+## `modelport promote` or `rollback` is refused
+
+Exit 8 with the reason. `a canary is running for <model>`: wait for its `deploy_candidate` run to finish. `did not pass the gate`: `modelport status <model>` shows why. `no previous version to roll back to`: promote a version by number instead.
+
+## `modelport predict` fails
+
+`<model> has no champion` (exit 7): no version has finished a canary yet; `modelport status <model>` shows where the newest one is. `Cannot reach Serve at http://localhost:8000` (exit 6): run `make ui`, which forwards `localhost:8000`. A 422 names the column that does not fit the signature.
+
+## A batch day has no predictions
+
+See [components/batch.md](components/batch.md#when-something-goes-wrong): the model had no champion or no input under `s3://batch-input/<dataset>/<day>/`, or its job failed and the `run_batch` task log has the job's log tail.

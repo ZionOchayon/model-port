@@ -81,9 +81,8 @@ def expected(root: Path, readme_text: str) -> tuple[str, str]:
         block = table(rows, f"docs/results/raw/{raw[-1].name}")
     else:
         page = block = PLACEHOLDER
-    return f"# Bench results (FR-13)\n\nMethod: `bench/README.md`.\n\n{page}\n", replace_block(
-        readme_text, block
-    )
+    header = "# Bench results (FR-13)\n\nMethod: [docs/components/bench.md](../components/bench.md).\n\n"
+    return f"{header}{page}\n", replace_block(readme_text, block)
 
 
 def main(argv: Sequence[str] | None = None) -> int:

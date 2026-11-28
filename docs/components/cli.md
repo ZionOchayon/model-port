@@ -49,6 +49,32 @@ Shows the model's aliases (`champion`, `candidate`, `previous`), the newest vers
 
 With `--json`: `{"model", "aliases", "newest": {"version", "state", "gate": {"result", "reasons", "report", "champion_report"}}, "airflow": [...], "links": {...}}`.
 
+## `modelport promote NAME VERSION`
+
+Makes `VERSION` the champion and updates serving with the zero-downtime swap, through the `serve_sync` DAG ([canary.md](canary.md)). It asks for confirmation first. It is refused (exit 8) when the version did not pass the gate, and the DAG also refuses when a canary is running for the model or the version is already the champion.
+
+| Option              | Default | Effect                                                                      |
+| ------------------- | ------- | --------------------------------------------------------------------------- |
+| `--wait`            | off     | Block until serving runs the new champion, then print the aliases.          |
+| `--timeout SECONDS` | `1800`  | With `--wait`, give up after this long (exit 12); the run keeps going.      |
+| `--yes`             | off     | Do not ask for confirmation.                                                |
+
+## `modelport rollback NAME`
+
+Makes the `previous` version the champion again, with the same swap and the same options as `promote`. Refused (exit 8) when the model has no `previous` version.
+
+With `--json`, `promote` and `rollback` print `{"model", "action", "target", "run_id", "url"}`, plus `"aliases"` with `--wait`.
+
+## `modelport predict NAME FILE`
+
+Sends rows from `FILE` to the model's endpoint (`POST /<model>/predict`, see [serving.md](serving.md)) and prints one prediction per row, with the version and variant (`champion` or `candidate`) that answered. `FILE` is a `.json` file (a request body or a list of rows), a `.csv` or `.parquet` file, or one `.png`/`.jpg` image for a model with exactly one binary input. The rows are checked against the champion's signature before they are sent (exit 4 with the column and a fix); a model with no champion exits 7. One request holds at most 1,024 rows.
+
+| Option     | Default  | Effect                                   |
+| ---------- | -------- | ---------------------------------------- |
+| `--rows N` | all rows | Send only the first `N` rows (1 to 1,024). |
+
+With `--json`, it prints the `PredictResponse`: `{"model", "version", "variant", "predictions": [{"prediction", "confidence"}]}`.
+
 ## Exit codes
 
 | Code | Error                      | Meaning                                                                |

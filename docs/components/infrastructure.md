@@ -1,6 +1,6 @@
 # Infrastructure
 
-Everything runs on one kind cluster named `modelport`, in three namespaces: `platform` (Airflow, MLflow, PostgreSQL, MinIO), `ray` (the KubeRay operator, training RayJobs, the shared RayCluster) and `monitoring` (Prometheus and Grafana, from v0.2). `make up` builds it from nothing; `make down` deletes it. Every pinned version is in [`versions.env`](../../versions.env).
+Everything runs on one kind cluster named `modelport`, in three namespaces: `platform` (Airflow, MLflow, PostgreSQL, MinIO), `ray` (the KubeRay operator, training RayJobs, the shared RayCluster, the RayService `modelport-serve`) and `monitoring` (Prometheus, and on the full profile Grafana and Alertmanager). `make up` builds it from nothing; `make down` deletes it. Every pinned version is in [`versions.env`](../../versions.env).
 
 ## `make up`
 
@@ -24,7 +24,7 @@ Everything runs on one kind cluster named `modelport`, in three namespaces: `pla
 | 14 Wait        | `scripts/wait_ready.py`: every pod Ready, the KubeRay CRDs present, `modelport-shared` ready, MLflow healthy, every DAG loaded with no import errors. Gives up after `UP_TIMEOUT` seconds (default 1500, exit 124).                                             |
 | 15 Credentials | Writes `.modelport/credentials.env` (mode 600): the Airflow password for the CLI, and the S3 keys for platform tooling.                                                                                                                                         |
 
-`make ui` port-forwards Airflow (`localhost:8080`), MLflow (`5000`), MinIO's S3 API (`9000`), the Ray dashboard (`8265`) and, once it exists, Serve (`8000`), and prints the Airflow login.
+`make ui` port-forwards Airflow (`localhost:8080`), MLflow (`5000`), MinIO's S3 API (`9000`), the Ray dashboard (`8265`), Serve (`8000`) and Prometheus (`9090`), and prints the Airflow login.
 
 ## Profiles
 
@@ -130,3 +130,30 @@ KubeRay operator chart 1.7.3.
 | `resources`                                         | Requests and limits of the operator pod.                                                           |
 | `metrics.enabled`                                   | The operator exports metrics.                                                                      |
 | `metrics.serviceMonitor` | Enabled: Prometheus scrapes the operator every 30 s with the operator's labels. |
+
+### `deploy/helm/kube-prometheus-stack.values.yaml`
+
+kube-prometheus-stack chart 93.11.1, installed as release `kps` in `monitoring` before KubeRay (step 6). Keys with a comment in the file are explained there; the others:
+
+| Key | Value and why |
+| --- | --- |
+| `fullnameOverride` | `kps`: short object names (`kps-prometheus`, which `make ui` forwards to `localhost:9090`). |
+| `kubeEtcd`, `kubeScheduler`, `kubeControllerManager`, `kubeProxy` | Disabled: kind does not expose these control-plane targets, so their scrapes would always be down. |
+| `prometheus-node-exporter.resources`, `prometheusOperator.resources` | Small requests and limits for one node. |
+| `prometheus.prometheusSpec.scrapeInterval` | `15s`: Serve and Ray metrics are read over canary windows of minutes. |
+| `prometheus.prometheusSpec.evaluationInterval` | `30s` for recording and alert rules. |
+| `prometheus.prometheusSpec.retentionSize` | `1GB`, with `retention` 2 days: a development stack. |
+| `prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues`, `prometheus.prometheusSpec.ruleSelectorNilUsesHelmValues`, `prometheus.prometheusSpec.probeSelectorNilUsesHelmValues`, `prometheus.prometheusSpec.scrapeConfigSelectorNilUsesHelmValues` | `false`: Prometheus selects every ServiceMonitor, rule, probe and scrape config in the cluster, not only the chart's own (the PodMonitors in `deploy/monitoring` and KubeRay's ServiceMonitor). |
+| `prometheus.prometheusSpec.resources` | 512 Mi requested, 1.5 Gi limit. |
+| `alertmanager.enabled`, `alertmanager.alertmanagerSpec.resources` | Alertmanager runs on the full profile, with small requests and limits. |
+| `grafana.enabled`, `grafana.fullnameOverride`, `grafana.resources` | Grafana runs on the full profile as `grafana`, with small requests and limits. |
+
+### `deploy/helm/kube-prometheus-stack.smoke.values.yaml`
+
+Added on the smoke profile (CI): Prometheus and the exporters only.
+
+| Key | Value and why |
+| --- | --- |
+| `alertmanager.enabled`, `grafana.enabled` | `false`: CI checks metrics in Prometheus; nothing reads alerts or dashboards there. |
+| `prometheus.prometheusSpec.retention`, `prometheus.prometheusSpec.retentionSize` | 1 day and 512 MB: a CI run lasts under two hours. |
+| `prometheus.prometheusSpec.resources` | 384 Mi requested, 1 Gi limit. |
