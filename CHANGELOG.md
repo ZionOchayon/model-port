@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Four Grafana dashboards in the folder `modelport` (full profile): Platform overview, Serving, Models
+  (versions, gate and canary results, PSI, live confidence and class shares against the baseline) and
+  Pipelines (DAG runs, task durations, the Ray patterns' timings) (FR-15).
 - Slack notifications: with `SLACK_WEBHOOK_URL` set, `make up` stores it in a Secret and routes every
   alert to Slack; without it, alerts stay in Alertmanager. CI checks both configs with `amtool`, from
   `scripts/extract_rules.py --alertmanager` (FR-16).

@@ -50,6 +50,8 @@ BUILTIN = {
     "up",
 }
 METRIC = re.compile(r"\b(?:ray|modelport|airflow|kuberay|kube|container)[a-zA-Z0-9_:]*|\bALERTS\b")
+# label matchers and grouping clauses hold label names, not metric names
+LABELS = re.compile(r"\{[^}]*\}|\b(?:by|without|on|ignoring|group_left|group_right)\s*\([^)]*\)")
 
 
 def exported() -> set[str]:
@@ -72,7 +74,7 @@ def used_names() -> tuple[set[str], set[str]]:
     for path in sorted((ROOT / "deploy/monitoring/dashboards").glob("*.json")):
         exprs += re.findall(r'"expr":\s*"((?:[^"\\]|\\.)*)"', path.read_text(encoding="utf-8"))
         json.loads(path.read_text(encoding="utf-8"))  # every dashboard is valid JSON
-    used = {m for e in exprs for m in METRIC.findall(e)}
+    used = {m for e in exprs for m in METRIC.findall(LABELS.sub(" ", e))}
     return used, recorded
 
 

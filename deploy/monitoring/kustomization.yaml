@@ -5,3 +5,21 @@ resources:
   - podmonitors.yaml
   - servicemonitors.yaml
   - prometheus-rules.yaml
+# Grafana's sidecar loads every ConfigMap labelled grafana_dashboard=1 into the folder its annotation names.
+configMapGenerator:
+  - name: dashboard-platform-overview
+    files: [dashboards/platform-overview.json]
+    options:
+      { labels: { grafana_dashboard: "1" }, annotations: { grafana_folder: modelport }, disableNameSuffixHash: true }
+  - name: dashboard-serving
+    files: [dashboards/serving.json]
+    options:
+      { labels: { grafana_dashboard: "1" }, annotations: { grafana_folder: modelport }, disableNameSuffixHash: true }
+  - name: dashboard-models
+    files: [dashboards/models.json]
+    options:
+      { labels: { grafana_dashboard: "1" }, annotations: { grafana_folder: modelport }, disableNameSuffixHash: true }
+  - name: dashboard-pipelines
+    files: [dashboards/pipelines.json]
+    options:
+      { labels: { grafana_dashboard: "1" }, annotations: { grafana_folder: modelport }, disableNameSuffixHash: true }
