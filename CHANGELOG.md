@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Airflow DAG `batch_inference` (daily, or for a given `day` and `models`): scores the day's input under
+  `s3://batch-input/<dataset>/<day>/` with each model's champion on the shared Ray cluster, the version
+  locked when the run starts, into `s3://predictions/<model>/<day>/` with a `_SUCCESS.json` marker. A
+  rerun (`force_rerun: true`) replaces the day's predictions and never duplicates them (check V-12).
 - Canary failure drill `bench/drills/canary_failure.sh` and check V-10: a version that passed the gate
   fails half its live requests during its canary, and is rolled back and rejected for its error rate
   while the champion keeps serving.

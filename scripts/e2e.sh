@@ -5,6 +5,7 @@ set -euo pipefail
 STAGE=${1:?usage: scripts/e2e.sh v0.1|v0.2|v0.3}
 P=smoke
 IMG=examples/models/image-classifier
+DAY=2026-01-01 # batch input day (V-12): both runs are forced, so the second rewrites the first
 group() { echo "::group::$*"; "$@"; echo "::endgroup::"; }
 mp() { uv run modelport "$@"; }
 ops() { uv run python scripts/ops.py "$@"; }
@@ -49,7 +50,14 @@ if [[ $STAGE != v0.1 ]]; then
   group mp predict covertype-classifier "$TAB/example/input.parquet"
   group bash bench/drills/zero_downtime.sh fashion-classifier
   group bash bench/drills/canary_failure.sh covertype-classifier
-  checks=$checks,V-09,V-10,V-11
+  group uv run python examples/datasets/prepare.py --batch-input --dataset fashion-mnist --day "$DAY" --rows 2000 --upload
+  group uv run python examples/datasets/prepare.py --batch-input --dataset covertype --day "$DAY" --rows 2000 --upload
+  for i in 1 2; do
+    group ops trigger batch_inference "ci_batch_${GITHUB_RUN_ID:-local}_$i" \
+      --conf "{\"day\": \"$DAY\", \"force_rerun\": true}" --wait --timeout 1800
+    group ops snapshot-predictions --day "$DAY" --out ".data/v12-run$i.json"
+  done
+  checks=$checks,V-09,V-10,V-11,V-12
 fi
 if [[ $STAGE == v0.3 ]]; then
   echo "e2e: stage $STAGE is not implemented yet" >&2

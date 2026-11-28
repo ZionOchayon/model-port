@@ -7,6 +7,7 @@ Prints PASS/FAIL per check; exit 1 if any check fails. Needs `make up` and `make
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import re
 import subprocess
@@ -486,7 +487,47 @@ def v10(ctx: Context) -> None:
     require(not problems, "; ".join(problems))
 
 
+BATCH_RUNS = (ROOT / ".data" / "v12-run1.json", ROOT / ".data" / "v12-run2.json")
+
+
+def batch_rerun_problems(
+    run1: Mapping[str, Any], run2: Mapping[str, Any], input_rows: Mapping[str, int]
+) -> list[str]:
+    """What two forced batch runs of one day break of FR-12: same predictions, one per input row."""
+    problems = []
+    for model, rows in input_rows.items():
+        if model not in run1:
+            problems.append(f"{model}: no predictions")
+        elif run1[model] != run2.get(model):
+            problems.append(f"{model}: the two runs wrote different predictions")
+        elif run1[model]["rows"] != rows:
+            problems.append(f"{model}: {run1[model]['rows']} predictions for {rows} input rows")
+    return problems
+
+
+def _input_rows(store: Any, model: str) -> int:  # noqa: ANN401 - S3DatasetStore
+    """Input rows of the model's newest batch job (its `_SUCCESS.json` names the input)."""
+    import pyarrow.parquet as pq
+
+    markers = [u for u in store.list(f"s3://predictions/{model}/") if u.endswith("/_SUCCESS.json")]
+    require(markers, f"{model}: no batch job finished")
+    newest = max((json.loads(store.read_bytes(u)) for u in markers), key=lambda m: m["finished_at"])
+    files = [u for u in store.list(newest["input_uri"]) if u.endswith(".parquet")]
+    return sum(pq.ParquetFile(io.BytesIO(store.read_bytes(u))).metadata.num_rows for u in files)
+
+
+def v12(ctx: Context) -> None:
+    """After two forced batch_inference runs of one day: identical predictions, one per input row."""
+    missing = [p.relative_to(ROOT).as_posix() for p in BATCH_RUNS if not p.is_file()]
+    require(not missing, f"{', '.join(missing)} missing (run snapshot-predictions after each run)")
+    run1, run2 = (json.loads(p.read_text(encoding="utf-8")) for p in BATCH_RUNS)
+    inputs = {model: _input_rows(ctx.store, model) for model in SERVED_MODELS}
+    problems = batch_rerun_problems(run1, run2, inputs)
+    require(not problems, "; ".join(problems))
+
+
 CHECKS: dict[str, Callable[[Context], None]] = {
+    "V-12": v12,
     "V-10": v10,
     "V-09": v09,
     "V-11": v11,

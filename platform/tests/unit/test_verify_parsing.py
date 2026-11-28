@@ -1,3 +1,4 @@
+import json
 import sys
 from pathlib import Path
 
@@ -176,3 +177,13 @@ def test_ops_wait_dag_run_if_exists(monkeypatch):
     wait = ["wait-dag-run", "deploy_candidate", "deploy__m__v3"]
     assert ops.main([*wait, "--if-exists", "--timeout", "1"]) == 0
     assert ops.main([*wait, "--timeout", "0"]) != 0
+
+
+def test_batch_rerun_problems():
+    run = {"m": {"rows": 2, "hashes": ["a", "b"]}, "n": {"rows": 1, "hashes": ["c"]}}
+    inputs = {"m": 2, "n": 1}
+    assert verify.batch_rerun_problems(run, json.loads(json.dumps(run)), inputs) == []
+    other = {**run, "n": {"rows": 1, "hashes": ["d"]}}
+    assert verify.batch_rerun_problems(run, other, inputs) == ["n: the two runs wrote different predictions"]
+    assert verify.batch_rerun_problems(run, run, {"m": 3, "n": 1}) == ["m: 2 predictions for 3 input rows"]
+    assert verify.batch_rerun_problems({}, {}, inputs) == ["m: no predictions", "n: no predictions"]
