@@ -38,6 +38,7 @@ DAGS = {
 HELM_FILES = {
     "v0.1": ["airflow.values.yaml", "airflow.smoke.values.yaml", "kuberay-operator.values.yaml"],
     "v0.2": ["kube-prometheus-stack.values.yaml", "kube-prometheus-stack.smoke.values.yaml"],
+    "v0.3": ["pushgateway.values.yaml", "kube-prometheus-stack.slack.values.yaml"],
 }
 SDK_DOC = "docs/components/sdk.md"
 CLI_DOC = "docs/components/cli.md"

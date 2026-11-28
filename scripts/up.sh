@@ -57,6 +57,7 @@ helm repo add prometheus-community https://prometheus-community.github.io/helm-c
 step "6 monitoring"
 kps_values=(-f deploy/helm/kube-prometheus-stack.values.yaml)
 [[ $PROFILE == smoke ]] && kps_values+=(-f deploy/helm/kube-prometheus-stack.smoke.values.yaml)
+[[ -n ${SLACK_WEBHOOK_URL:-} ]] && kps_values+=(-f deploy/helm/kube-prometheus-stack.slack.values.yaml) # secrets.sh made alertmanager-slack
 helm --kube-context kind-modelport upgrade --install kps prometheus-community/kube-prometheus-stack \
   --version "$KPS_CHART_VERSION" -n monitoring "${kps_values[@]}" --wait --timeout 10m > /dev/null
 helm --kube-context kind-modelport upgrade --install pushgateway prometheus-community/prometheus-pushgateway \

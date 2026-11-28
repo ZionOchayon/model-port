@@ -73,3 +73,22 @@ def test_repo_alerts_have_runbook_anchors():
     runbook = (ROOT / "docs/runbook.md").read_text(encoding="utf-8")
     groups = yaml.safe_load(text)["spec"]["groups"]
     assert extract_rules.runbook_problems(groups, extract_rules.anchors(runbook)) == []
+
+
+def test_alertmanager_config_from_rendered_chart(tmp_path):
+    import base64
+
+    config = "route:\n  receiver: slack\nreceivers:\n  - name: slack\n"
+    rendered = tmp_path / "kps.yaml"
+    rendered.write_text(
+        "apiVersion: v1\nkind: ConfigMap\nmetadata: {name: other}\n---\n"
+        "apiVersion: v1\nkind: Secret\nmetadata: {name: alertmanager-kps-alertmanager}\n"
+        f"data:\n  alertmanager.yaml: {base64.b64encode(config.encode()).decode()}\n",
+        encoding="utf-8",
+    )
+    out = tmp_path / "am.yaml"
+    assert extract_rules.main(["--alertmanager", str(rendered), str(out)]) == 0
+    assert out.read_text(encoding="utf-8") == config
+    rendered.write_text("apiVersion: v1\nkind: ConfigMap\nmetadata: {name: other}\n", encoding="utf-8")
+    with pytest.raises(SystemExit, match="no Alertmanager config"):
+        extract_rules.main(["--alertmanager", str(rendered), str(out)])

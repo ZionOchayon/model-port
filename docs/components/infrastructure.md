@@ -162,6 +162,10 @@ Added on the smoke profile (CI): Prometheus and the exporters only.
 
 prometheus-pushgateway chart 3.11.2, release `pushgateway` in `monitoring`. Every key is commented in the file. Airflow tasks push to `http://pushgateway.monitoring.svc.cluster.local:9091` (`MODELPORT_PUSHGATEWAY_URL` in the platform env); a failed push is logged and never fails a task.
 
+### `deploy/helm/kube-prometheus-stack.slack.values.yaml`
+
+Added by `make up` only when `SLACK_WEBHOOK_URL` is set in its environment; `scripts/secrets.sh` then stores the URL in the Secret `alertmanager-slack` in `monitoring`, and the values point Alertmanager at the mounted file (`api_url_file`), so the URL never appears in values or in the rendered config. Every alert but `Watchdog` goes to Slack, grouped by alert name, model and application, with resolved notices. Without it, alerts are visible in Alertmanager (`localhost:9093` on the full profile) and sent nowhere. CI renders both configs and checks them with `amtool check-config`.
+
 ## Monitoring objects (`deploy/monitoring/`)
 
 | File | Objects |

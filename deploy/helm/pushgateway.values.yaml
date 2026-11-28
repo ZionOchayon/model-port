@@ -7,6 +7,6 @@ persistentVolume:
   enabled: false # pushed values are re-pushed by the next run; losing them on a restart is acceptable
 serviceMonitor:
   enabled: true # Prometheus scrapes the Pushgateway
-  namespace: monitoring
+  namespace: monitoring # next to the platform's other monitors
   honorLabels: true # keep the pushed job and instance labels instead of the scrape's
-  interval: 15s
+  interval: 15s # the same as every other scrape

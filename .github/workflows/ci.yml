@@ -100,6 +100,15 @@ jobs:
           lint kube-prometheus-stack deploy/helm/kube-prometheus-stack.values.yaml
           lint kube-prometheus-stack deploy/helm/kube-prometheus-stack.values.yaml deploy/helm/kube-prometheus-stack.smoke.values.yaml
           lint prometheus-pushgateway deploy/helm/pushgateway.values.yaml
+          lint kube-prometheus-stack deploy/helm/kube-prometheus-stack.values.yaml deploy/helm/kube-prometheus-stack.slack.values.yaml
+          # the Alertmanager config, with and without Slack, as the chart renders it
+          mkdir -p .data
+          for extra in "" "-f deploy/helm/kube-prometheus-stack.slack.values.yaml"; do
+            helm template kps "$charts/kube-prometheus-stack" -n monitoring -f deploy/helm/kube-prometheus-stack.values.yaml $extra > .data/kps.yaml
+            uv run python scripts/extract_rules.py --alertmanager .data/kps.yaml .data/alertmanager-rendered.yaml
+            docker run --rm -v "$PWD/.data:/w" --entrypoint amtool "$ALERTMANAGER_IMAGE" check-config /w/alertmanager-rendered.yaml
+          done
+          grep -q api_url_file .data/alertmanager-rendered.yaml
 
       - name: Kustomize renders
         run: |

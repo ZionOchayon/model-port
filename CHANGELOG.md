@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Slack notifications: with `SLACK_WEBHOOK_URL` set, `make up` stores it in a Secret and routes every
+  alert to Slack; without it, alerts stay in Alertmanager. CI checks both configs with `amtool`, from
+  `scripts/extract_rules.py --alertmanager` (FR-16).
 - Alert rules (FR-17): `ModelDriftWarning`, `ModelDriftCritical` (daily PSI, or the live prediction
   distribution for 15 minutes), `ServeErrorRate`, `ServeLatencyP95`, `CanaryFailed`, `DagFailed` and
   `RayJobStuck`, each with a runbook section; `make rules-test` runs their promtool unit tests, and
