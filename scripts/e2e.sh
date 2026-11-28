@@ -63,18 +63,23 @@ if [[ $STAGE != v0.1 ]]; then
     group ops snapshot-predictions --day "$DAY" --out ".data/v12-run$i.json"
   done
   checks=$checks,V-09,V-10,V-11,V-12
-  # drift check (FR-16): the drills' traffic is in the inference logs; the samples count is pushed either way
+fi
+
+# ---- v0.3: monitoring (FR-14), drift and alerts (FR-16) ----
+if [[ $STAGE == v0.3 ]]; then
+  # the drills' traffic is in the inference logs; the samples count is pushed either way
   group ops trigger drift_check "ci_drift_${GITHUB_RUN_ID:-local}" --wait --timeout 900
   group ops wait-metric 'max(modelport_drift_samples{model="fashion-classifier"})' --timeout 120
-  # metrics (FR-14): a run that must fail, so airflow_dagrun_failed_count exists, then every source
+  # a run that must fail, so airflow_dagrun_failed_count exists, then every source has data
   NEG="ci_negative_${GITHUB_RUN_ID:-local}"
   group ops trigger train_model "$NEG" --conf '{"model": "fashion-classifier", "submission_run_id": "does-not-exist"}'
   group ops wait-dag-run train_model "$NEG" --state failed --timeout 900
   group uv run python scripts/metrics_check.py --profile "$P" --negative
-fi
-if [[ $STAGE == v0.3 ]]; then
-  echo "e2e: stage $STAGE is not implemented yet" >&2
-  exit 1
+  # drifted traffic; V-16 waits up to 20 minutes from here for ModelDriftCritical
+  date +%s > .data/v16-start
+  group ops trigger simulate_drift "ci_simulate_${GITHUB_RUN_ID:-local}" \
+    --conf '{"model": "fashion-classifier", "perturbation": "invert", "duration_minutes": 5}' --wait --timeout 1800
+  checks=$checks,V-14,V-16
 fi
 
-group uv run python scripts/verify.py --profile "$P" --model fashion-classifier --checks "$checks"
+group uv run python scripts/verify.py --profile "$P" --model fashion-classifier --checks "$checks" --wait-alert-until-minutes 20

@@ -214,3 +214,27 @@ def test_bench_problems(tmp_path):
     (raw / "bench-20260101T000000Z.csv").write_text(header + "".join(lines), encoding="utf-8")
     assert summarize.main(["--root", str(tmp_path)]) == 0
     assert verify.bench_problems(tmp_path) == []
+
+
+def test_dashboard_problems():
+    uids = list(verify.DASHBOARDS)
+    full = {uid: {1: True, 2: True, 3: True, 4: True} for uid in uids}
+    assert verify.dashboard_problems(uids, full) == []
+    sparse = {**full, "modelport-models": {1: True, 2: False, 3: False, 4: True}}
+    assert verify.dashboard_problems([*uids[:3], "other"], sparse) == [
+        "dashboards in folder modelport: "
+        "['modelport-models', 'modelport-platform', 'modelport-serving', 'other']",
+        "modelport-models: 2 of 4 panels have data (need 75%)",
+    ]
+    allowed = {**full, "modelport-platform": {1: False, 10: False, 11: False, 12: False, 2: True}}
+    assert verify.dashboard_problems(uids, allowed) == []  # panels expected to be empty on a healthy stack
+
+
+def test_alertmanager_lists_alert():
+    alerts = [
+        {"labels": {"alertname": "ModelDriftCritical", "model": "m"}, "status": {"state": "active"}},
+        {"labels": {"alertname": "ModelDriftCritical", "model": "n"}, "status": {"state": "suppressed"}},
+    ]
+    assert verify.alertmanager_lists(alerts, "ModelDriftCritical", "m")
+    assert not verify.alertmanager_lists(alerts, "ModelDriftCritical", "n")
+    assert not verify.alertmanager_lists(alerts, "CanaryFailed", "m")

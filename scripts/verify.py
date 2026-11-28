@@ -22,6 +22,8 @@ from typing import Any, Final
 
 ROOT = Path(__file__).resolve().parents[1]
 PROMETHEUS_URL: Final = "http://localhost:9090"  # make ui
+GRAFANA_URL: Final = "http://localhost:3000"  # make ui, full profile
+ALERTMANAGER_URL: Final = "http://localhost:9093"  # make ui, full profile
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 STAGE_CHECKS: dict[str, tuple[str, ...]] = {
@@ -175,6 +177,7 @@ class Context:
     airflow: Any  # AirflowClient
     store: Any  # S3DatasetStore
     profile: str = "smoke"
+    wait_alert_minutes: float = 0.0
 
     def versions(self) -> list[Any]:
         """Every version of the model (MLflow ModelVersion objects)."""
@@ -564,6 +567,109 @@ def v13(ctx: Context) -> None:
     require(not problems, "; ".join(problems))
 
 
+DASHBOARDS: Final = ("modelport-platform", "modelport-serving", "modelport-models", "modelport-pipelines")
+# panels empty on a healthy stack: firing alerts, pods not ready, restarts, OOM kills, errors, failures
+ALLOWED_EMPTY: Final = {
+    "modelport-platform": {1, 10, 11, 12},
+    "modelport-serving": {6},
+    "modelport-pipelines": {2},
+}
+
+
+def dashboard_problems(uids: Sequence[str], data: Mapping[str, Mapping[int, bool]]) -> list[str]:
+    """The four dashboards exist, and at least 75% of each one's query panels have data (or may be empty)."""
+    problems = []
+    if sorted(uids) != sorted(DASHBOARDS):
+        problems.append(f"dashboards in folder modelport: {sorted(uids)}")
+    for uid in DASHBOARDS:
+        panels = data.get(uid, {})
+        allowed = ALLOWED_EMPTY.get(uid, set())
+        good = sum(1 for pid, has in panels.items() if has or pid in allowed)
+        if panels and good < 0.75 * len(panels):
+            with_data = sum(panels.values())
+            problems.append(f"{uid}: {with_data} of {len(panels)} panels have data (need 75%)")
+    return problems
+
+
+def alertmanager_lists(alerts: Iterable[Mapping[str, Any]], alertname: str, model: str) -> bool:
+    """An active alert with that name and model is in Alertmanager's `/api/v2/alerts` answer."""
+    return any(
+        a["labels"].get("alertname") == alertname
+        and a["labels"].get("model") == model
+        and a.get("status", {}).get("state") == "active"
+        for a in alerts
+    )
+
+
+def v15(ctx: Context) -> None:
+    """FR-15 (full profile): the four dashboards are in Grafana, most panels with data for the last hour."""
+    import ops
+    import requests
+
+    require(ctx.profile == "full", "V-15 needs the full profile (Grafana)")
+    session = requests.Session()
+    session.auth = ("admin", ops.credentials().get("MODELPORT_GRAFANA_PASSWORD", ""))
+
+    def get(path: str, **params: str) -> Any:  # noqa: ANN401 - Grafana JSON
+        response = session.get(f"{GRAFANA_URL}{path}", params=params, timeout=30)
+        response.raise_for_status()
+        return response.json()
+
+    folder = next((f["uid"] for f in get("/api/folders") if f["title"] == "modelport"), None)
+    require(folder, "Grafana has no folder modelport")
+    uids = [d["uid"] for d in get("/api/search", type="dash-db", folderUIDs=folder)]
+    datasource = get("/api/datasources/name/Prometheus")["uid"]
+    data: dict[str, dict[int, bool]] = {}
+    for uid in DASHBOARDS:
+        if uid not in uids:
+            continue
+        data[uid] = {}
+        for panel in get(f"/api/dashboards/uid/{uid}")["dashboard"]["panels"]:
+            if not panel.get("targets"):
+                continue  # text panels
+            expr = panel["targets"][0]["expr"].replace("$model", ".+")
+            query = {"refId": "A", "expr": expr, "datasource": {"uid": datasource}, "range": True}
+            response = session.post(
+                f"{GRAFANA_URL}/api/ds/query",
+                json={"queries": [query], "from": "now-1h", "to": "now"},
+                timeout=60,
+            )
+            frames = response.json().get("results", {}).get("A", {}).get("frames", []) if response.ok else []
+            data[uid][panel["id"]] = any(any(v) for f in frames for v in f.get("data", {}).get("values", []))
+        print(f"V-15 {uid}: {sum(data[uid].values())} of {len(data[uid])} panels with data")
+    problems = dashboard_problems(uids, data)
+    require(not problems, "; ".join(problems))
+
+
+V16_START: Final = ROOT / ".data" / "v16-start"
+
+
+def v16(ctx: Context) -> None:
+    """FR-16: ModelDriftCritical fires for the model soon after simulate_drift (and is in Alertmanager)."""
+    require(
+        V16_START.is_file(), f"{V16_START.relative_to(ROOT)} missing (written before simulate_drift starts)"
+    )
+    start = float(V16_START.read_text(encoding="utf-8").strip())
+    deadline = start + max(ctx.wait_alert_minutes, 0) * 60
+    query = f'count(ALERTS{{alertname="ModelDriftCritical", alertstate="firing", model="{ctx.model}"}})'
+    prometheus = _prometheus()
+    while not prometheus.scalar(query):
+        require(
+            time.time() < deadline,
+            f"ModelDriftCritical not firing for {ctx.model} by start + {ctx.wait_alert_minutes:g} min",
+        )
+        time.sleep(15)
+    print(f"V-16 ModelDriftCritical firing for {ctx.model} after {(time.time() - start) / 60:.1f} min")
+    if ctx.profile == "full":
+        import requests
+
+        alerts = requests.get(f"{ALERTMANAGER_URL}/api/v2/alerts", timeout=15).json()
+        require(
+            alertmanager_lists(alerts, "ModelDriftCritical", ctx.model),
+            "Alertmanager does not list the alert",
+        )
+
+
 def v14(ctx: Context) -> None:
     """FR-14: scripts/metrics_check.py passes (every target up, every source with data)."""
     import metrics_check
@@ -573,6 +679,8 @@ def v14(ctx: Context) -> None:
 
 CHECKS: dict[str, Callable[[Context], None]] = {
     "V-14": v14,
+    "V-15": v15,
+    "V-16": v16,
     "V-13": v13,
     "V-12": v12,
     "V-10": v10,
@@ -626,11 +734,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--model", default="fashion-classifier")
     parser.add_argument("--checks", help="comma-separated check IDs (default: every check of --stage)")
     parser.add_argument("--stage", choices=STAGES)
+    parser.add_argument(
+        "--wait-alert-until-minutes", type=float, default=0, help="V-16: wait this long after .data/v16-start"
+    )
     args = parser.parse_args(argv)
     stage = args.stage or default_stage((ROOT / "CHANGELOG.md").read_text(encoding="utf-8"))
     wanted = parse_checks(args.checks) if args.checks else checks_for_stage(stage)
     ctx = build_context(args.model)
     ctx.profile = args.profile
+    ctx.wait_alert_minutes = args.wait_alert_until_minutes
+    if args.profile == "full" and not args.checks and "V-16" in wanted:
+        wanted.append("V-15")  # Grafana runs on the full profile only
     results: list[tuple[str, str | None]] = []
     for check in wanted:
         fn = CHECKS.get(check)

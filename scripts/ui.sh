@@ -20,6 +20,8 @@ forwards=(
   "Ray-dashboard ray modelport-shared-head-svc 8265:8265"
   "Serve ray modelport-serve-serve-svc 8000:8000"
   "Prometheus monitoring kps-prometheus 9090:9090"
+  "Grafana monitoring grafana 3000:80"
+  "Alertmanager monitoring kps-alertmanager 9093:9093"
 )
 for forward in "${forwards[@]}"; do
   read -r name ns svc ports <<< "$forward"
@@ -34,6 +36,7 @@ if [[ -f .modelport/credentials.env ]]; then
   # shellcheck source=/dev/null
   . .modelport/credentials.env
   echo "ui: Airflow login modelport / ${MODELPORT_AIRFLOW_PASSWORD}"
+  [[ -n ${MODELPORT_GRAFANA_PASSWORD:-} ]] && $k get svc -n monitoring grafana > /dev/null 2>&1 \n    && echo "ui: Grafana login admin / ${MODELPORT_GRAFANA_PASSWORD}"
 fi
 if [[ ${MODELPORT_TOOLBOX:-} == 1 && -t 0 ]]; then
   echo "ui: forwarding until Ctrl+C"

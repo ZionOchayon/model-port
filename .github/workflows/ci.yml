@@ -19,7 +19,7 @@ env:
   NO_COLOR: "1"
   UV_FROZEN: "1"
   # Highest stage whose e2e steps exist; raised as each release's flow lands.
-  MODELPORT_STAGE: v0.2
+  MODELPORT_STAGE: v0.3
 
 jobs:
   static:

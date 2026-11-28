@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Checks V-15 (full profile: the four dashboards are in Grafana and most panels have data) and V-16
+  (`ModelDriftCritical` fires within 20 minutes of `simulate_drift`, and is in Alertmanager on the full
+  profile; `verify.py --wait-alert-until-minutes`). The CI end-to-end flow now runs the v0.3 stage, and
+  `make ui` also forwards Grafana (`localhost:3000`) and Alertmanager (`localhost:9093`) when they run.
 - `make metrics-check` (FR-14, check V-14): every Prometheus target is up, every required scrape pool has
   a target, and Ray, KubeRay, Serve, the models, Airflow, drift, the lifecycle pushes and Kubernetes all
   have data. The CI end-to-end flow runs it after a deliberately failing DAG run.
